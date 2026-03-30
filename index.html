@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#0a0a0f"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="description" content="Scan visiting cards and export contacts to Excel — 100% free"/>
+<link rel="manifest" href="manifest.json"/>
+<title>CardScan — Free Visiting Card to Excel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<!-- Tesseract.js — runs OCR fully in the browser, 100% free -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- SheetJS — generates Excel files in browser, 100% free -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131c;
+    --surface2: #1c1c2e;
+    --accent: #00f5c4;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --danger: #ef4444;
+    --border: rgba(0,245,196,0.15);
+    --glow: 0 0 30px rgba(0,245,196,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,245,196,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,196,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* HEADER */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 17px;
+  }
+  .logo-text { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-text span { color: var(--accent); }
+  .logo-sub { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
+  .free-badge {
+    background: linear-gradient(135deg, rgba(0,245,196,0.15), rgba(124,58,237,0.15));
+    border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 10px;
+    font-size: 11px; font-weight: 700; color: var(--accent);
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  /* MAIN */
+  main { position: relative; z-index: 1; padding: 16px; max-width: 480px; margin: 0 auto; padding-bottom: 110px; }
+
+  /* FREE BADGE NOTICE */
+  .free-notice {
+    background: rgba(0,245,196,0.06);
+    border: 1px solid rgba(0,245,196,0.2);
+    border-radius: 14px; padding: 12px 14px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .free-notice-icon { font-size: 24px; flex-shrink: 0; }
+  .free-notice-text { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .free-notice-text strong { color: var(--accent); font-size: 13px; display: block; margin-bottom: 2px; }
+
+  /* SCAN CARD */
+  .scan-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; overflow: hidden; margin-bottom: 16px; box-shadow: var(--glow);
+  }
+  .scan-area {
+    position: relative; width: 100%; aspect-ratio: 16/10;
+    background: #000; overflow: hidden; cursor: pointer;
+  }
+  #previewImg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; display: none;
+  }
+  .scan-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.7); gap: 10px; transition: opacity 0.3s;
+  }
+  .scan-overlay.hidden { opacity: 0; pointer-events: none; }
+  .scan-placeholder-icon {
+    width: 60px; height: 60px;
+    border: 2px solid var(--accent); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,245,196,0.4); }
+    50% { box-shadow: 0 0 0 12px rgba(0,245,196,0); }
+  }
+  .scan-corner {
+    position: absolute; width: 22px; height: 22px;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+  }
+  .scan-corner.tl { top:10px; left:10px; border-top-width:3px; border-left-width:3px; border-radius:4px 0 0 0; }
+  .scan-corner.tr { top:10px; right:10px; border-top-width:3px; border-right-width:3px; border-radius:0 4px 0 0; }
+  .scan-corner.bl { bottom:10px; left:10px; border-bottom-width:3px; border-left-width:3px; border-radius:0 0 0 4px; }
+  .scan-corner.br { bottom:10px; right:10px; border-bottom-width:3px; border-right-width:3px; border-radius:0 0 4px 0; }
+  .scan-line {
+    position: absolute; left:0; right:0; height:2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scanLine 1.8s ease-in-out infinite; display: none;
+  }
+  @keyframes scanLine { 0%{top:8%;opacity:1} 100%{top:92%;opacity:0.3} }
+
+  .scan-actions {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px;
+  }
+
+  /* BUTTONS */
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 11px 14px; border: none; border-radius: 12px;
+    font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #00c4a0);
+    color: #0a0a0f; box-shadow: 0 4px 14px rgba(0,245,196,0.25);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,245,196,0.35); }
+  .btn-secondary {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+  .btn-excel {
+    background: linear-gradient(135deg, #217346, #1a5c38); color: #fff;
+    grid-column: 1/-1; box-shadow: 0 4px 14px rgba(33,115,70,0.3);
+  }
+  .btn-excel:hover { box-shadow: 0 6px 20px rgba(33,115,70,0.45); transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+  #fileInput { display: none; }
+
+  /* PROGRESS */
+  .progress-card {
+    background: var(--surface2); border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 16px; padding: 16px; margin-bottom: 16px; display: none;
+  }
+  .progress-card.active { display: block; }
+  .progress-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid rgba(124,58,237,0.2);
+    border-top-color: var(--accent2); border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-label { font-size: 13px; font-weight: 700; }
+  .progress-sub { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; }
+  .progress-bar-track {
+    height: 4px; background: rgba(255,255,255,0.06);
+    border-radius: 4px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 4px; transition: width 0.4s ease; width: 0%;
+  }
+
+  /* EDIT FORM */
+  .edit-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 16px; margin-bottom: 16px; display: none;
+  }
+  .edit-card.active { display: block; }
+  .edit-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .edit-title { font-size: 15px; font-weight: 800; color: var(--accent); }
+  .edit-subtitle { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+  .field-group { display: flex; flex-direction: column; gap: 3px; }
+  .field-group.full { grid-column: 1/-1; }
+  .field-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .field-input {
+    background: var(--surface2); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 9px 11px;
+    color: var(--text); font-family: 'Syne', sans-serif; font-size: 13px;
+    outline: none; transition: border-color 0.2s; width: 100%;
+  }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input::placeholder { color: var(--muted); opacity: 0.5; }
+  .edit-actions { display: flex; gap: 9px; }
+  .edit-actions .btn { flex: 1; }
+
+  /* RAW OCR */
+  .raw-toggle { font-size: 11px; color: var(--muted); cursor: pointer; margin-bottom: 10px; display: inline-flex; align-items: center; gap: 5px; }
+  .raw-box {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px; color: var(--muted);
+    font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.7;
+    resize: none; outline: none; margin-bottom: 12px; display: none;
+    max-height: 120px; overflow-y: auto;
+  }
+  .raw-box.show { display: block; }
+
+  /* CONTACTS */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    letter-spacing: 1.5px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after { content:''; flex:1; height:1px; background: var(--border); }
+  #contactsList { display: flex; flex-direction: column; gap: 9px; }
+  .contact-card {
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px; padding: 13px; display: flex; gap: 11px; align-items: flex-start;
+    transition: border-color 0.2s; animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .contact-card:hover { border-color: var(--border); }
+  .contact-avatar {
+    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 800; color: #fff;
+  }
+  .contact-info { flex: 1; min-width: 0; }
+  .contact-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
+  .contact-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: var(--surface2); border-radius: 6px;
+    padding: 2px 7px; font-size: 10px; color: var(--muted);
+    font-family: 'Space Mono', monospace; max-width: 170px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chip.em { color: var(--accent); }
+  .chip.ph { color: var(--accent3); }
+  .contact-del {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; padding: 3px; border-radius: 6px; font-size: 13px;
+    line-height: 1; transition: color 0.2s; flex-shrink: 0;
+  }
+  .contact-del:hover { color: var(--danger); }
+
+  .empty-state { text-align: center; padding: 36px 20px; color: var(--muted); }
+  .empty-icon { font-size: 44px; margin-bottom: 10px; opacity: 0.35; }
+  .empty-text { font-size: 13px; line-height: 1.7; }
+
+  /* BOTTOM BAR */
+  .bottom-bar {
+    position: fixed; bottom:0; left:0; right:0;
+    background: rgba(10,10,15,0.96); backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    padding: 10px 14px; padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    display: flex; gap: 8px; z-index: 50;
+    max-width: 480px; margin: 0 auto;
+  }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 80px; left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 18px; font-size: 13px; font-weight: 600;
+    z-index: 999; transition: transform 0.3s ease; white-space: nowrap;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.success { border-color: rgba(0,245,196,0.4); color: var(--accent); }
+  #toast.error { border-color: rgba(239,68,68,0.4); color: var(--danger); }
+  #toast.info { border-color: rgba(124,58,237,0.4); color: #a78bfa; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🪪</div>
+    <div>
+      <div class="logo-text">Card<span>Scan</span></div>
+      <div class="logo-sub" id="countLabel">0 contacts</div>
+    </div>
+  </div>
+  <div class="free-badge">✦ 100% FREE</div>
+</header>
+
+<main>
+
+  <!-- Free notice -->
+  <div class="free-notice">
+    <div class="free-notice-icon">🔓</div>
+    <div class="free-notice-text">
+      <strong>No API key. No account. No payment.</strong>
+      OCR runs directly in your browser using Tesseract.js. Your card images never leave your device.
+    </div>
+  </div>
+
+  <!-- Scan card -->
+  <div class="scan-card">
+    <div class="scan-area" id="scanArea" onclick="triggerFile()">
+      <img id="previewImg" alt="card preview"/>
+      <div class="scan-overlay" id="scanOverlay">
+        <div class="scan-corner tl"></div>
+        <div class="scan-corner tr"></div>
+        <div class="scan-corner bl"></div>
+        <div class="scan-corner br"></div>
+        <div class="scan-placeholder-icon">🪪</div>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">Tap to scan visiting card</span>
+        <span style="font-size:11px;color:var(--muted)">Camera or gallery — works offline</span>
+      </div>
+      <div class="scan-line" id="scanLine"></div>
+    </div>
+    <div class="scan-actions">
+      <button class="btn btn-secondary" onclick="triggerFile()">📷 Photo / Gallery</button>
+      <button class="btn btn-secondary" id="clearBtn" onclick="clearImage()" disabled>✕ Clear</button>
+      <button class="btn btn-primary" id="ocrBtn" onclick="runOCR()" disabled>✦ Extract Info</button>
+      <button class="btn btn-excel" id="exportBtn" onclick="exportExcel()" disabled>📊 Export Excel</button>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)"/>
+
+  <!-- Progress -->
+  <div class="progress-card" id="progressCard">
+    <div class="progress-header">
+      <div class="spinner"></div>
+      <div>
+        <div class="progress-label" id="progressLabel">Initializing OCR engine...</div>
+        <div class="progress-sub" id="progressSub">Tesseract.js — runs in browser</div>
+      </div>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <!-- Edit form -->
+  <div class="edit-card" id="editCard">
+    <div class="edit-header">
+      <div>
+        <div class="edit-title">✦ Extracted Contact</div>
+        <div class="edit-subtitle" id="editSubtitle">Review &amp; edit if needed</div>
+      </div>
+    </div>
+    <div class="fields-grid">
+      <div class="field-group full">
+        <label class="field-label">Full Name</label>
+        <input class="field-input" id="f_name" placeholder="e.g. Priya Sharma"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Job Title</label>
+        <input class="field-input" id="f_title" placeholder="e.g. CEO"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Company</label>
+        <input class="field-input" id="f_company" placeholder="e.g. Acme Pvt Ltd"/>
+      </div>
+      <div class="field-group full">
+        <label class="field-label">Email</label>
+        <input class="field-input" id="f_email" type="email" placeholder="e.g. priya@acme.com"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Phone</label>
+        <input class="field-input" id="f_phone" placeholder="e.g. +91 98765 43210"/>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Alt Phone</label>
+        <input class="field-input" id="f_phone2" placeholder="optional"/>
+      </div>
+      <div class="field-group full">
+        <label class="field-label">Website</label>
+        <input class="field-input" id="f_website" placeholder="e.g. www.acme.com"/>
+      </div>
+      <div class="field-group full">
+        <label class="field-label">Address</label>
+        <input class="field-input" id="f_address" placeholder="e.g. 123 MG Road, Bangalore"/>
+      </div>
+    </div>
+    <span class="raw-toggle" onclick="toggleRaw()">👁 <span id="rawToggleLabel">Show raw OCR text</span></span>
+    <textarea class="raw-box" id="rawBox" readonly></textarea>
+    <div class="edit-actions">
+      <button class="btn btn-danger" onclick="cancelEdit()">✕ Discard</button>
+      <button class="btn btn-primary" onclick="saveContact()">✓ Save Contact</button>
+    </div>
+  </div>
+
+  <!-- Contacts -->
+  <div class="section-header">
+    <div class="section-title" style="flex:1">Saved Contacts</div>
+  </div>
+  <div id="contactsList">
+    <div class="empty-state">
+      <div class="empty-icon">📇</div>
+      <div class="empty-text">No contacts yet.<br/>Scan your first visiting card!</div>
+    </div>
+  </div>
+
+</main>
+
+<div class="bottom-bar">
+  <button class="btn btn-secondary" style="flex:1" onclick="triggerFile()">📷 Scan</button>
+  <button class="btn btn-excel" style="flex:2" id="exportBtnBottom" onclick="exportExcel()" disabled>📊 Export Excel</button>
+  <button class="btn btn-danger" style="flex:1" id="clearAllBtn" onclick="clearAll()" disabled>🗑 Clear</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────────────────────
+let contacts = JSON.parse(localStorage.getItem('cs_contacts') || '[]');
+let currentImageDataUrl = null;
+let rawOCRText = '';
+let rawShown = false;
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+window.onload = () => renderContacts();
+
+// ── FILE HANDLING ─────────────────────────────────────────────────────────
+function triggerFile() { document.getElementById('fileInput').click(); }
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    currentImageDataUrl = ev.target.result;
+    document.getElementById('previewImg').src = currentImageDataUrl;
+    document.getElementById('previewImg').style.display = 'block';
+    document.getElementById('scanOverlay').classList.add('hidden');
+    document.getElementById('ocrBtn').disabled = false;
+    document.getElementById('clearBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function clearImage() {
+  currentImageDataUrl = null;
+  document.getElementById('previewImg').style.display = 'none';
+  document.getElementById('previewImg').src = '';
+  document.getElementById('scanOverlay').classList.remove('hidden');
+  document.getElementById('ocrBtn').disabled = true;
+  document.getElementById('clearBtn').disabled = true;
+  document.getElementById('editCard').classList.remove('active');
+}
+
+// ── OCR WITH TESSERACT.JS ─────────────────────────────────────────────────
+async function runOCR() {
+  if (!currentImageDataUrl) return;
+  document.getElementById('ocrBtn').disabled = true;
+  document.getElementById('editCard').classList.remove('active');
+  showProgress(true, 'Loading OCR engine...', 5);
+  document.getElementById('scanLine').style.display = 'block';
+
+  try {
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          showProgress(true, `Reading card... ${pct}%`, pct);
+        } else if (m.status === 'loading tesseract core') {
+          showProgress(true, 'Loading OCR engine...', 10);
+        } else if (m.status === 'initializing tesseract') {
+          showProgress(true, 'Initializing...', 20);
+        } else if (m.status === 'loading language traineddata') {
+          showProgress(true, 'Loading language data...', 35);
+        }
+      }
+    });
+
+    showProgress(true, 'Scanning card...', 50);
+    const { data: { text } } = await worker.recognize(currentImageDataUrl);
+    await worker.terminate();
+
+    rawOCRText = text.trim();
+    showProgress(true, 'Parsing contact fields...', 95);
+    await delay(300);
+    showProgress(false);
+    document.getElementById('scanLine').style.display = 'none';
+
+    const parsed = parseCardText(rawOCRText);
+    populateForm(parsed, rawOCRText);
+    document.getElementById('editCard').classList.add('active');
+    document.getElementById('editCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch (err) {
+    showProgress(false);
+    document.getElementById('scanLine').style.display = 'none';
+    document.getElementById('ocrBtn').disabled = false;
+    toast('OCR failed: ' + err.message, 'error');
+  }
+}
+
+// ── SMART PARSER ──────────────────────────────────────────────────────────
+function parseCardText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+
+  // Email
+  const emailMatch = text.match(/[\w.\-+]+@[\w.\-]+\.[a-z]{2,}/i);
+  const email = emailMatch ? emailMatch[0].toLowerCase() : '';
+
+  // Phone — Indian & international patterns
+  const phoneMatches = [...text.matchAll(/(?:\+?91[\s\-]?)?(?:[6-9]\d{9}|(?:\d[\s.\-]?){7,12}(?:\d))/g)]
+    .map(m => m[0].replace(/\s+/g,' ').trim())
+    .filter(p => p.replace(/\D/g,'').length >= 7)
+    .slice(0,2);
+  const phone = phoneMatches[0] || '';
+  const phone2 = phoneMatches[1] || '';
+
+  // Website
+  const webMatch = text.match(/(?:www\.|https?:\/\/)[^\s,]+/i);
+  const website = webMatch ? webMatch[0].replace(/[,;]$/, '') : '';
+
+  // Remove matched fields from lines for cleaner name/title/company extraction
+  const cleanLines = lines.filter(l =>
+    !emailMatch?.includes(l) &&
+    !phoneMatches.some(p => l.includes(p.replace(/\D/g,'').slice(0,6))) &&
+    !webMatch?.includes(l) &&
+    !l.match(/^\+?\d[\d\s\-().]{6,}$/)
+  );
+
+  // Name heuristic: longest line with 2-4 words, mostly uppercase or title case, near top
+  let name = '';
+  const nameLineCandidates = cleanLines
+    .slice(0, Math.min(5, cleanLines.length))
+    .filter(l => {
+      const words = l.split(/\s+/);
+      return words.length >= 2 && words.length <= 5 &&
+        !/[@\/\\|:_\d]/.test(l) &&
+        l.length > 4 &&
+        !/^(pvt|ltd|inc|llc|co\.|www|tel|fax|mob|ph|email|address)/i.test(l);
+    })
+    .sort((a, b) => {
+      const aScore = /^[A-Z]/.test(a) ? 1 : 0;
+      const bScore = /^[A-Z]/.test(b) ? 1 : 0;
+      return bScore - aScore;
+    });
+  name = nameLineCandidates[0] || cleanLines[0] || '';
+
+  // Title: line with common job keywords
+  const titleKeywords = /\b(ceo|cto|cfo|coo|vp|director|manager|engineer|developer|designer|founder|president|head|officer|lead|senior|junior|analyst|consultant|executive|partner|associate|advisor|chairman|md|gm|dg|proprietor|owner)\b/i;
+  const titleLine = cleanLines.find(l => titleKeywords.test(l) && l !== name);
+  let title = titleLine ? titleLine : '';
+
+  // Company: line with Pvt, Ltd, Inc, LLP, or longest capitalised line after name
+  const companyKeywords = /\b(pvt|ltd|private|limited|inc|llp|llc|solutions|technologies|services|consultancy|group|industries|enterprises|systems|labs|studio|designs|media|agency)\b/i;
+  const companyLine = cleanLines.find(l => companyKeywords.test(l) && l !== name && l !== title);
+  let company = companyLine || '';
+
+  // Address: line with typical address keywords or numbers + street
+  const addrKeywords = /\b(road|street|nagar|colony|sector|plot|floor|building|complex|phase|block|lane|avenue|marg|garden|park|city|town|district|state|pin|zip|\d{3,})/i;
+  const addrLines = cleanLines.filter(l =>
+    addrKeywords.test(l) && l !== name && l !== title && l !== company
+  );
+  const address = addrLines.join(', ');
+
+  return { name, title, company, email, phone, phone2, website, address };
+}
+
+function populateForm(d, raw) {
+  document.getElementById('f_name').value = d.name || '';
+  document.getElementById('f_title').value = d.title || '';
+  document.getElementById('f_company').value = d.company || '';
+  document.getElementById('f_email').value = d.email || '';
+  document.getElementById('f_phone').value = d.phone || '';
+  document.getElementById('f_phone2').value = d.phone2 || '';
+  document.getElementById('f_website').value = d.website || '';
+  document.getElementById('f_address').value = d.address || '';
+  document.getElementById('rawBox').value = raw || '';
+  document.getElementById('editSubtitle').textContent = d.name ? `Found: ${d.name}` : 'Check and fill in fields';
+}
+
+function toggleRaw() {
+  rawShown = !rawShown;
+  document.getElementById('rawBox').classList.toggle('show', rawShown);
+  document.getElementById('rawToggleLabel').textContent = rawShown ? 'Hide raw OCR text' : 'Show raw OCR text';
+}
+
+function cancelEdit() {
+  document.getElementById('editCard').classList.remove('active');
+  document.getElementById('ocrBtn').disabled = false;
+}
+
+// ── SAVE ──────────────────────────────────────────────────────────────────
+function saveContact() {
+  const contact = {
+    id: Date.now(),
+    name: val('f_name') || 'Unknown',
+    title: val('f_title'),
+    company: val('f_company'),
+    email: val('f_email'),
+    phone: val('f_phone'),
+    phone2: val('f_phone2'),
+    website: val('f_website'),
+    address: val('f_address'),
+    scannedAt: new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+  };
+  contacts.unshift(contact);
+  persist();
+  renderContacts();
+  document.getElementById('editCard').classList.remove('active');
+  clearImage();
+  toast(`✓ ${contact.name} saved!`, 'success');
+}
+
+function deleteContact(id) {
+  contacts = contacts.filter(c => c.id !== id);
+  persist();
+  renderContacts();
+  toast('Removed', 'info');
+}
+
+function clearAll() {
+  if (!confirm(`Delete all ${contacts.length} contacts?`)) return;
+  contacts = [];
+  persist();
+  renderContacts();
+  toast('All contacts cleared', 'info');
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+function renderContacts() {
+  const list = document.getElementById('contactsList');
+  const n = contacts.length;
+  document.getElementById('countLabel').textContent = `${n} contact${n !== 1 ? 's' : ''}`;
+  const hasContacts = n > 0;
+  ['exportBtn','exportBtnBottom','clearAllBtn'].forEach(id => {
+    document.getElementById(id).disabled = !hasContacts;
+  });
+
+  if (!hasContacts) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📇</div><div class="empty-text">No contacts yet.<br/>Scan your first visiting card!</div></div>`;
+    return;
+  }
+
+  list.innerHTML = contacts.map(c => `
+    <div class="contact-card">
+      <div class="contact-avatar">${(c.name||'?')[0].toUpperCase()}</div>
+      <div class="contact-info">
+        <div class="contact-name">${esc(c.name)}</div>
+        <div class="contact-meta">${[esc(c.title),esc(c.company)].filter(Boolean).join(' · ')||'—'}</div>
+        <div class="chips">
+          ${c.email?`<span class="chip em">✉ ${esc(c.email)}</span>`:''}
+          ${c.phone?`<span class="chip ph">📞 ${esc(c.phone)}</span>`:''}
+          ${c.website?`<span class="chip">🌐 ${esc(c.website)}</span>`:''}
+        </div>
+      </div>
+      <button class="contact-del" onclick="deleteContact(${c.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+// ── EXCEL EXPORT ──────────────────────────────────────────────────────────
+function exportExcel() {
+  if (!contacts.length) return toast('No contacts to export', 'error');
+
+  const headers = ['Name','Job Title','Company','Email','Phone','Alt Phone','Website','Address','Scanned On'];
+  const rows = contacts.map(c => [c.name,c.title,c.company,c.email,c.phone,c.phone2,c.website,c.address,c.scannedAt]);
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:22},{wch:20},{wch:24},{wch:28},{wch:16},{wch:16},{wch:22},{wch:34},{wch:14}];
+
+  // Freeze header row
+  ws['!freeze'] = { xSplit:0, ySplit:1 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
+
+  const date = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `CardScan_${date}.xlsx`);
+  toast(`📊 Exported ${contacts.length} contacts!`, 'success');
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────────
+function showProgress(show, label='', pct=0) {
+  document.getElementById('progressCard').classList.toggle('active', show);
+  document.getElementById('progressLabel').textContent = label;
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+function persist() { localStorage.setItem('cs_contacts', JSON.stringify(contacts)); }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+let toastT;
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `show ${type}`;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
