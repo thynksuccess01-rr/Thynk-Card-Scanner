@@ -6,293 +6,143 @@
 <meta name="theme-color" content="#0a0a0f"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="description" content="Scan visiting cards and export contacts to Excel — 100% free"/>
+<meta name="description" content="Scan visiting cards and export to Excel — Google Vision AI, 100% free"/>
 <link rel="manifest" href="manifest.json"/>
-<title>CardScan — Free Visiting Card to Excel</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<title>CardScan — Visiting Card to Excel</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
-<!-- Tesseract.js — runs OCR fully in the browser, 100% free -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<!-- SheetJS — generates Excel files in browser, 100% free -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  :root {
-    --bg: #0a0a0f;
-    --surface: #13131c;
-    --surface2: #1c1c2e;
-    --accent: #00f5c4;
-    --accent2: #7c3aed;
-    --accent3: #f59e0b;
-    --text: #e8e8f0;
-    --muted: #6b6b8a;
-    --danger: #ef4444;
-    --border: rgba(0,245,196,0.15);
-    --glow: 0 0 30px rgba(0,245,196,0.15);
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Syne', sans-serif;
-    min-height: 100dvh;
-    overflow-x: hidden;
-  }
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
-    background-image:
-      linear-gradient(rgba(0,245,196,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,245,196,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none; z-index: 0;
-  }
+:root {
+  --bg:#0a0a0f; --surface:#13131c; --surface2:#1c1c2e;
+  --accent:#00f5c4; --accent2:#7c3aed; --accent3:#f59e0b;
+  --google:#4285F4;
+  --text:#e8e8f0; --muted:#6b6b8a; --danger:#ef4444;
+  --border:rgba(0,245,196,0.15); --glow:0 0 28px rgba(0,245,196,0.1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100dvh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,245,196,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,196,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 
-  /* HEADER */
-  header {
-    position: sticky; top: 0; z-index: 100;
-    background: rgba(10,10,15,0.92);
-    backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--border);
-    padding: 12px 16px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-icon {
-    width: 34px; height: 34px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center; font-size: 17px;
-  }
-  .logo-text { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
-  .logo-text span { color: var(--accent); }
-  .logo-sub { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
-  .free-badge {
-    background: linear-gradient(135deg, rgba(0,245,196,0.15), rgba(124,58,237,0.15));
-    border: 1px solid var(--border);
-    border-radius: 20px; padding: 4px 10px;
-    font-size: 11px; font-weight: 700; color: var(--accent);
-    display: flex; align-items: center; gap: 4px;
-  }
+header{position:sticky;top:0;z-index:100;background:rgba(10,10,15,0.93);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:9px}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px}
+.logo-text{font-size:17px;font-weight:800;letter-spacing:-.5px}
+.logo-text span{color:var(--accent)}
+.logo-sub{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace}
+.free-badge{background:linear-gradient(135deg,rgba(66,133,244,0.15),rgba(124,58,237,0.15));border:1px solid rgba(66,133,244,0.25);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--google)}
 
-  /* MAIN */
-  main { position: relative; z-index: 1; padding: 16px; max-width: 480px; margin: 0 auto; padding-bottom: 110px; }
+main{position:relative;z-index:1;padding:14px 14px 110px;max-width:480px;margin:0 auto}
 
-  /* FREE BADGE NOTICE */
-  .free-notice {
-    background: rgba(0,245,196,0.06);
-    border: 1px solid rgba(0,245,196,0.2);
-    border-radius: 14px; padding: 12px 14px; margin-bottom: 16px;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .free-notice-icon { font-size: 24px; flex-shrink: 0; }
-  .free-notice-text { font-size: 12px; color: var(--muted); line-height: 1.6; }
-  .free-notice-text strong { color: var(--accent); font-size: 13px; display: block; margin-bottom: 2px; }
+/* SETUP */
+.setup-card{background:var(--surface);border:1px solid rgba(66,133,244,0.25);border-radius:18px;padding:16px;margin-bottom:14px;transition:border-color .3s}
+.setup-card.saved{border-color:rgba(0,245,196,0.3)}
+.setup-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.setup-title{font-size:14px;font-weight:800}
+.setup-body{} 
+.setup-desc{font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:11px}
+.steps-box{background:var(--surface2);border-radius:10px;padding:11px 13px;margin-bottom:12px}
+.step{display:flex;gap:10px;font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:7px}
+.step:last-child{margin-bottom:0}
+.step-num{background:rgba(66,133,244,0.2);color:var(--google);border-radius:50%;width:19px;height:19px;min-width:19px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;margin-top:1px}
+.step a{color:#60a5fa;text-decoration:none}
+.step strong{color:var(--text)}
+.key-row{display:flex;gap:8px}
+.key-input{flex:1;background:var(--surface2);border:1px solid rgba(66,133,244,0.2);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Space Mono',monospace;font-size:11px;outline:none;transition:border-color .2s}
+.key-input:focus{border-color:var(--google)}
+.key-input::placeholder{color:var(--muted);opacity:.5}
+.save-btn{background:rgba(66,133,244,0.15);border:1px solid rgba(66,133,244,0.3);border-radius:10px;padding:10px 16px;color:var(--google);font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
+.save-btn:hover{background:rgba(66,133,244,0.28)}
+.key-status{font-size:11px;font-family:'Space Mono',monospace;margin-top:7px;display:none}
+.key-status.ok{color:var(--accent);display:block}
+.key-status.err{color:var(--danger);display:block}
+.collapse-btn{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Space Mono',monospace;margin-top:8px;padding:0;display:none}
+.collapse-btn.show{display:block}
 
-  /* SCAN CARD */
-  .scan-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 20px; overflow: hidden; margin-bottom: 16px; box-shadow: var(--glow);
-  }
-  .scan-area {
-    position: relative; width: 100%; aspect-ratio: 16/10;
-    background: #000; overflow: hidden; cursor: pointer;
-  }
-  #previewImg {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    object-fit: cover; display: none;
-  }
-  .scan-overlay {
-    position: absolute; inset: 0;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.7); gap: 10px; transition: opacity 0.3s;
-  }
-  .scan-overlay.hidden { opacity: 0; pointer-events: none; }
-  .scan-placeholder-icon {
-    width: 60px; height: 60px;
-    border: 2px solid var(--accent); border-radius: 12px;
-    display: flex; align-items: center; justify-content: center; font-size: 26px;
-    animation: pulse 2s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(0,245,196,0.4); }
-    50% { box-shadow: 0 0 0 12px rgba(0,245,196,0); }
-  }
-  .scan-corner {
-    position: absolute; width: 22px; height: 22px;
-    border-color: var(--accent); border-style: solid; border-width: 0;
-  }
-  .scan-corner.tl { top:10px; left:10px; border-top-width:3px; border-left-width:3px; border-radius:4px 0 0 0; }
-  .scan-corner.tr { top:10px; right:10px; border-top-width:3px; border-right-width:3px; border-radius:0 4px 0 0; }
-  .scan-corner.bl { bottom:10px; left:10px; border-bottom-width:3px; border-left-width:3px; border-radius:0 0 0 4px; }
-  .scan-corner.br { bottom:10px; right:10px; border-bottom-width:3px; border-right-width:3px; border-radius:0 0 4px 0; }
-  .scan-line {
-    position: absolute; left:0; right:0; height:2px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    animation: scanLine 1.8s ease-in-out infinite; display: none;
-  }
-  @keyframes scanLine { 0%{top:8%;opacity:1} 100%{top:92%;opacity:0.3} }
+/* SCAN */
+.scan-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;margin-bottom:14px;box-shadow:var(--glow)}
+.scan-area{position:relative;width:100%;aspect-ratio:16/10;background:#000;overflow:hidden;cursor:pointer}
+#previewImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+.scan-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.68);gap:10px;transition:opacity .3s}
+.scan-overlay.hidden{opacity:0;pointer-events:none}
+.scan-icon-box{width:58px;height:58px;border:2.5px solid var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,245,196,.4)}50%{box-shadow:0 0 0 12px rgba(0,245,196,0)}}
+.sc{position:absolute;width:22px;height:22px;border-color:var(--accent);border-style:solid;border-width:0}
+.sc.tl{top:10px;left:10px;border-top-width:3px;border-left-width:3px;border-radius:4px 0 0 0}
+.sc.tr{top:10px;right:10px;border-top-width:3px;border-right-width:3px;border-radius:0 4px 0 0}
+.sc.bl{bottom:10px;left:10px;border-bottom-width:3px;border-left-width:3px;border-radius:0 0 0 4px}
+.sc.br{bottom:10px;right:10px;border-bottom-width:3px;border-right-width:3px;border-radius:0 0 4px 0}
+.scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:scanl 1.8s ease-in-out infinite;display:none}
+@keyframes scanl{0%{top:8%;opacity:1}100%{top:92%;opacity:.3}}
+.scan-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:12px}
 
-  .scan-actions {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px;
-  }
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 13px;border:none;border-radius:12px;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#00c4a0);color:#0a0a0f;box-shadow:0 4px 14px rgba(0,245,196,.2)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,245,196,.3)}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.2)}
+.btn-excel{background:linear-gradient(135deg,#217346,#1a5c38);color:#fff;grid-column:1/-1;box-shadow:0 4px 14px rgba(33,115,70,.25)}
+.btn-excel:hover{box-shadow:0 6px 18px rgba(33,115,70,.4);transform:translateY(-1px)}
+.btn:disabled{opacity:.35;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+#fileInput{display:none}
 
-  /* BUTTONS */
-  .btn {
-    display: flex; align-items: center; justify-content: center; gap: 7px;
-    padding: 11px 14px; border: none; border-radius: 12px;
-    font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px;
-  }
-  .btn-primary {
-    background: linear-gradient(135deg, var(--accent), #00c4a0);
-    color: #0a0a0f; box-shadow: 0 4px 14px rgba(0,245,196,0.25);
-  }
-  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,245,196,0.35); }
-  .btn-secondary {
-    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
-  }
-  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-danger { background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
-  .btn-excel {
-    background: linear-gradient(135deg, #217346, #1a5c38); color: #fff;
-    grid-column: 1/-1; box-shadow: 0 4px 14px rgba(33,115,70,0.3);
-  }
-  .btn-excel:hover { box-shadow: 0 6px 20px rgba(33,115,70,0.45); transform: translateY(-1px); }
-  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-  #fileInput { display: none; }
+/* PROGRESS */
+.progress-card{background:var(--surface2);border:1px solid rgba(66,133,244,.25);border-radius:16px;padding:16px;margin-bottom:14px;display:none}
+.progress-card.active{display:block}
+.progress-header{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.spinner{width:26px;height:26px;border:3px solid rgba(66,133,244,.2);border-top-color:var(--google);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.p-label{font-size:13px;font-weight:700}
+.p-sub{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace}
+.p-track{height:4px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.p-fill{height:100%;background:linear-gradient(90deg,var(--google),var(--accent));border-radius:4px;transition:width .5s ease;width:0%}
 
-  /* PROGRESS */
-  .progress-card {
-    background: var(--surface2); border: 1px solid rgba(124,58,237,0.3);
-    border-radius: 16px; padding: 16px; margin-bottom: 16px; display: none;
-  }
-  .progress-card.active { display: block; }
-  .progress-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .spinner {
-    width: 28px; height: 28px;
-    border: 3px solid rgba(124,58,237,0.2);
-    border-top-color: var(--accent2); border-radius: 50%;
-    animation: spin 0.8s linear infinite; flex-shrink: 0;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .progress-label { font-size: 13px; font-weight: 700; }
-  .progress-sub { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; }
-  .progress-bar-track {
-    height: 4px; background: rgba(255,255,255,0.06);
-    border-radius: 4px; overflow: hidden;
-  }
-  .progress-bar-fill {
-    height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent));
-    border-radius: 4px; transition: width 0.4s ease; width: 0%;
-  }
+/* EDIT */
+.edit-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:14px;display:none}
+.edit-card.active{display:block;animation:si .3s ease}
+@keyframes si{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.edit-title{font-size:15px;font-weight:800;color:var(--accent);margin-bottom:2px}
+.edit-sub{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:14px}
+.fg-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg.full{grid-column:1/-1}
+.fl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.fi{background:var(--surface2);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:9px 11px;color:var(--text);font-family:'Syne',sans-serif;font-size:13px;outline:none;transition:border-color .2s;width:100%}
+.fi:focus{border-color:var(--accent)}
+.fi::placeholder{color:var(--muted);opacity:.45}
+.raw-toggle{font-size:11px;color:var(--muted);cursor:pointer;margin-bottom:9px;display:inline-flex;align-items:center;gap:5px;user-select:none}
+.raw-box{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--muted);font-family:'Space Mono',monospace;font-size:10px;line-height:1.7;resize:none;outline:none;margin-bottom:12px;display:none;max-height:110px;overflow-y:auto}
+.raw-box.show{display:block}
+.edit-actions{display:flex;gap:9px}
+.edit-actions .btn{flex:1}
 
-  /* EDIT FORM */
-  .edit-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 20px; padding: 16px; margin-bottom: 16px; display: none;
-  }
-  .edit-card.active { display: block; }
-  .edit-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .edit-title { font-size: 15px; font-weight: 800; color: var(--accent); }
-  .edit-subtitle { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
-  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
-  .field-group { display: flex; flex-direction: column; gap: 3px; }
-  .field-group.full { grid-column: 1/-1; }
-  .field-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
-  .field-input {
-    background: var(--surface2); border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 10px; padding: 9px 11px;
-    color: var(--text); font-family: 'Syne', sans-serif; font-size: 13px;
-    outline: none; transition: border-color 0.2s; width: 100%;
-  }
-  .field-input:focus { border-color: var(--accent); }
-  .field-input::placeholder { color: var(--muted); opacity: 0.5; }
-  .edit-actions { display: flex; gap: 9px; }
-  .edit-actions .btn { flex: 1; }
+/* CONTACTS */
+.section-title{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+#contactsList{display:flex;flex-direction:column;gap:9px}
+.contact-card{background:var(--surface);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;display:flex;gap:11px;align-items:flex-start;transition:border-color .2s}
+.contact-card:hover{border-color:var(--border)}
+.cav{width:40px;height:40px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff}
+.ci{flex:1;min-width:0}
+.cn{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px}
+.cm{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{display:inline-flex;align-items:center;gap:3px;background:var(--surface2);border-radius:6px;padding:2px 7px;font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;max-width:175px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.em{color:var(--accent)}
+.chip.ph{color:var(--accent3)}
+.cdel{background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;border-radius:6px;font-size:13px;line-height:1;transition:color .2s;flex-shrink:0}
+.cdel:hover{color:var(--danger)}
+.empty-state{text-align:center;padding:36px 20px;color:var(--muted)}
+.empty-icon{font-size:42px;margin-bottom:10px;opacity:.3}
+.empty-text{font-size:13px;line-height:1.7}
 
-  /* RAW OCR */
-  .raw-toggle { font-size: 11px; color: var(--muted); cursor: pointer; margin-bottom: 10px; display: inline-flex; align-items: center; gap: 5px; }
-  .raw-box {
-    width: 100%; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 10px; padding: 10px; color: var(--muted);
-    font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.7;
-    resize: none; outline: none; margin-bottom: 12px; display: none;
-    max-height: 120px; overflow-y: auto;
-  }
-  .raw-box.show { display: block; }
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,15,.96);backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:50;max-width:480px;margin:0 auto}
 
-  /* CONTACTS */
-  .section-header {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
-  }
-  .section-title {
-    font-size: 12px; font-weight: 700; color: var(--muted);
-    letter-spacing: 1.5px; text-transform: uppercase;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .section-title::after { content:''; flex:1; height:1px; background: var(--border); }
-  #contactsList { display: flex; flex-direction: column; gap: 9px; }
-  .contact-card {
-    background: var(--surface); border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 16px; padding: 13px; display: flex; gap: 11px; align-items: flex-start;
-    transition: border-color 0.2s; animation: slideIn 0.3s ease;
-  }
-  @keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-  .contact-card:hover { border-color: var(--border); }
-  .contact-avatar {
-    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; font-weight: 800; color: #fff;
-  }
-  .contact-info { flex: 1; min-width: 0; }
-  .contact-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
-  .contact-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 3px;
-    background: var(--surface2); border-radius: 6px;
-    padding: 2px 7px; font-size: 10px; color: var(--muted);
-    font-family: 'Space Mono', monospace; max-width: 170px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .chip.em { color: var(--accent); }
-  .chip.ph { color: var(--accent3); }
-  .contact-del {
-    background: none; border: none; color: var(--muted);
-    cursor: pointer; padding: 3px; border-radius: 6px; font-size: 13px;
-    line-height: 1; transition: color 0.2s; flex-shrink: 0;
-  }
-  .contact-del:hover { color: var(--danger); }
-
-  .empty-state { text-align: center; padding: 36px 20px; color: var(--muted); }
-  .empty-icon { font-size: 44px; margin-bottom: 10px; opacity: 0.35; }
-  .empty-text { font-size: 13px; line-height: 1.7; }
-
-  /* BOTTOM BAR */
-  .bottom-bar {
-    position: fixed; bottom:0; left:0; right:0;
-    background: rgba(10,10,15,0.96); backdrop-filter: blur(20px);
-    border-top: 1px solid var(--border);
-    padding: 10px 14px; padding-bottom: calc(10px + env(safe-area-inset-bottom));
-    display: flex; gap: 8px; z-index: 50;
-    max-width: 480px; margin: 0 auto;
-  }
-
-  /* TOAST */
-  #toast {
-    position: fixed; bottom: 80px; left: 50%;
-    transform: translateX(-50%) translateY(60px);
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 12px; padding: 10px 18px; font-size: 13px; font-weight: 600;
-    z-index: 999; transition: transform 0.3s ease; white-space: nowrap;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  }
-  #toast.show { transform: translateX(-50%) translateY(0); }
-  #toast.success { border-color: rgba(0,245,196,0.4); color: var(--accent); }
-  #toast.error { border-color: rgba(239,68,68,0.4); color: var(--danger); }
-  #toast.info { border-color: rgba(124,58,237,0.4); color: #a78bfa; }
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 18px;font-size:13px;font-weight:600;z-index:999;transition:transform .3s ease;box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:88vw;text-align:center}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.success{border-color:rgba(0,245,196,.4);color:var(--accent)}
+#toast.error{border-color:rgba(239,68,68,.4);color:var(--danger)}
+#toast.info{border-color:rgba(124,58,237,.4);color:#a78bfa}
 </style>
 </head>
 <body>
@@ -305,102 +155,87 @@
       <div class="logo-sub" id="countLabel">0 contacts</div>
     </div>
   </div>
-  <div class="free-badge">✦ 100% FREE</div>
+  <div class="free-badge">🔵 Google Vision</div>
 </header>
 
 <main>
 
-  <!-- Free notice -->
-  <div class="free-notice">
-    <div class="free-notice-icon">🔓</div>
-    <div class="free-notice-text">
-      <strong>No API key. No account. No payment.</strong>
-      OCR runs directly in your browser using Tesseract.js. Your card images never leave your device.
+  <!-- SETUP -->
+  <div class="setup-card" id="setupCard">
+    <div class="setup-head">
+      <span style="font-size:18px">🔵</span>
+      <div class="setup-title">One-time Setup — Google Vision API</div>
     </div>
+    <div class="setup-body" id="setupBody">
+      <div class="setup-desc">
+        Google Cloud Vision reads card text with near-perfect accuracy — stylized fonts, bilingual cards, low light. <strong style="color:var(--accent)">1,000 free scans/month.</strong> No credit card needed to activate.
+      </div>
+      <div class="steps-box">
+        <div class="step"><div class="step-num">1</div><div>Go to <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → sign in with Google</div></div>
+        <div class="step"><div class="step-num">2</div><div>Click <strong>Select a project</strong> → <strong>New Project</strong> → name it anything → Create</div></div>
+        <div class="step"><div class="step-num">3</div><div>In the search bar type <strong>Cloud Vision API</strong> → open it → click <strong>Enable</strong></div></div>
+        <div class="step"><div class="step-num">4</div><div>Go to <strong>APIs &amp; Services → Credentials → + Create Credentials → API Key</strong></div></div>
+        <div class="step"><div class="step-num">5</div><div>Copy the key (starts with <strong>AIzaSy…</strong>) and paste below</div></div>
+      </div>
+      <div class="key-row">
+        <input class="key-input" type="password" id="apiKeyInput" placeholder="AIzaSy… paste your Google API key"/>
+        <button class="save-btn" onclick="saveKey()">Save</button>
+      </div>
+      <div class="key-status" id="keyStatus"></div>
+    </div>
+    <button class="collapse-btn" id="collapseBtn" onclick="toggleSetup()">▲ Hide setup</button>
   </div>
 
-  <!-- Scan card -->
+  <!-- SCAN -->
   <div class="scan-card">
-    <div class="scan-area" id="scanArea" onclick="triggerFile()">
-      <img id="previewImg" alt="card preview"/>
+    <div class="scan-area" onclick="triggerFile()">
+      <img id="previewImg" alt=""/>
       <div class="scan-overlay" id="scanOverlay">
-        <div class="scan-corner tl"></div>
-        <div class="scan-corner tr"></div>
-        <div class="scan-corner bl"></div>
-        <div class="scan-corner br"></div>
-        <div class="scan-placeholder-icon">🪪</div>
-        <span style="font-size:13px;font-weight:600;color:var(--text)">Tap to scan visiting card</span>
-        <span style="font-size:11px;color:var(--muted)">Camera or gallery — works offline</span>
+        <div class="sc tl"></div><div class="sc tr"></div>
+        <div class="sc bl"></div><div class="sc br"></div>
+        <div class="scan-icon-box">🪪</div>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">Tap to photograph visiting card</span>
+        <span style="font-size:11px;color:var(--muted)">Camera or gallery</span>
       </div>
       <div class="scan-line" id="scanLine"></div>
     </div>
     <div class="scan-actions">
-      <button class="btn btn-secondary" onclick="triggerFile()">📷 Photo / Gallery</button>
+      <button class="btn btn-secondary" onclick="triggerFile()">📷 Camera / Gallery</button>
       <button class="btn btn-secondary" id="clearBtn" onclick="clearImage()" disabled>✕ Clear</button>
-      <button class="btn btn-primary" id="ocrBtn" onclick="runOCR()" disabled>✦ Extract Info</button>
-      <button class="btn btn-excel" id="exportBtn" onclick="exportExcel()" disabled>📊 Export Excel</button>
+      <button class="btn btn-primary" id="ocrBtn" onclick="runOCR()" disabled>🔵 Extract Info</button>
+      <button class="btn btn-excel" id="exportBtn" onclick="exportExcel()" disabled>📊 Export to Excel</button>
     </div>
   </div>
 
   <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)"/>
 
-  <!-- Progress -->
+  <!-- PROGRESS -->
   <div class="progress-card" id="progressCard">
     <div class="progress-header">
       <div class="spinner"></div>
       <div>
-        <div class="progress-label" id="progressLabel">Initializing OCR engine...</div>
-        <div class="progress-sub" id="progressSub">Tesseract.js — runs in browser</div>
+        <div class="p-label" id="pLabel">Sending to Google Vision…</div>
+        <div class="p-sub">Cloud OCR · usually under 3 seconds</div>
       </div>
     </div>
-    <div class="progress-bar-track">
-      <div class="progress-bar-fill" id="progressFill"></div>
-    </div>
+    <div class="p-track"><div class="p-fill" id="pFill"></div></div>
   </div>
 
-  <!-- Edit form -->
+  <!-- EDIT FORM -->
   <div class="edit-card" id="editCard">
-    <div class="edit-header">
-      <div>
-        <div class="edit-title">✦ Extracted Contact</div>
-        <div class="edit-subtitle" id="editSubtitle">Review &amp; edit if needed</div>
-      </div>
+    <div class="edit-title">✦ Extracted Contact</div>
+    <div class="edit-sub" id="editSub">Review &amp; correct if needed, then save</div>
+    <div class="fg-grid">
+      <div class="fg full"><label class="fl">Full Name</label><input class="fi" id="f_name" placeholder="e.g. Priya Sharma"/></div>
+      <div class="fg"><label class="fl">Job Title</label><input class="fi" id="f_title" placeholder="e.g. CEO"/></div>
+      <div class="fg"><label class="fl">Company</label><input class="fi" id="f_company" placeholder="e.g. Acme Pvt Ltd"/></div>
+      <div class="fg full"><label class="fl">Email</label><input class="fi" id="f_email" type="email" placeholder="e.g. priya@acme.com"/></div>
+      <div class="fg"><label class="fl">Phone</label><input class="fi" id="f_phone" placeholder="e.g. +91 98765 43210"/></div>
+      <div class="fg"><label class="fl">Alt Phone</label><input class="fi" id="f_phone2" placeholder="optional"/></div>
+      <div class="fg full"><label class="fl">Website</label><input class="fi" id="f_website" placeholder="e.g. www.acme.com"/></div>
+      <div class="fg full"><label class="fl">Address</label><input class="fi" id="f_address" placeholder="e.g. 123 MG Road, Bangalore"/></div>
     </div>
-    <div class="fields-grid">
-      <div class="field-group full">
-        <label class="field-label">Full Name</label>
-        <input class="field-input" id="f_name" placeholder="e.g. Priya Sharma"/>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Job Title</label>
-        <input class="field-input" id="f_title" placeholder="e.g. CEO"/>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Company</label>
-        <input class="field-input" id="f_company" placeholder="e.g. Acme Pvt Ltd"/>
-      </div>
-      <div class="field-group full">
-        <label class="field-label">Email</label>
-        <input class="field-input" id="f_email" type="email" placeholder="e.g. priya@acme.com"/>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Phone</label>
-        <input class="field-input" id="f_phone" placeholder="e.g. +91 98765 43210"/>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Alt Phone</label>
-        <input class="field-input" id="f_phone2" placeholder="optional"/>
-      </div>
-      <div class="field-group full">
-        <label class="field-label">Website</label>
-        <input class="field-input" id="f_website" placeholder="e.g. www.acme.com"/>
-      </div>
-      <div class="field-group full">
-        <label class="field-label">Address</label>
-        <input class="field-input" id="f_address" placeholder="e.g. 123 MG Road, Bangalore"/>
-      </div>
-    </div>
-    <span class="raw-toggle" onclick="toggleRaw()">👁 <span id="rawToggleLabel">Show raw OCR text</span></span>
+    <span class="raw-toggle" onclick="toggleRaw()">👁 <span id="rawLbl">Show raw text from card</span></span>
     <textarea class="raw-box" id="rawBox" readonly></textarea>
     <div class="edit-actions">
       <button class="btn btn-danger" onclick="cancelEdit()">✕ Discard</button>
@@ -408,10 +243,8 @@
     </div>
   </div>
 
-  <!-- Contacts -->
-  <div class="section-header">
-    <div class="section-title" style="flex:1">Saved Contacts</div>
-  </div>
+  <!-- CONTACTS -->
+  <div class="section-title">Saved Contacts</div>
   <div id="contactsList">
     <div class="empty-state">
       <div class="empty-icon">📇</div>
@@ -423,43 +256,97 @@
 
 <div class="bottom-bar">
   <button class="btn btn-secondary" style="flex:1" onclick="triggerFile()">📷 Scan</button>
-  <button class="btn btn-excel" style="flex:2" id="exportBtnBottom" onclick="exportExcel()" disabled>📊 Export Excel</button>
+  <button class="btn btn-excel" style="flex:2" id="exportBtnB" onclick="exportExcel()" disabled>📊 Export Excel</button>
   <button class="btn btn-danger" style="flex:1" id="clearAllBtn" onclick="clearAll()" disabled>🗑 Clear</button>
 </div>
 
 <div id="toast"></div>
 
 <script>
-// ── STATE ─────────────────────────────────────────────────────────────────
-let contacts = JSON.parse(localStorage.getItem('cs_contacts') || '[]');
-let currentImageDataUrl = null;
-let rawOCRText = '';
-let rawShown = false;
+// ── STATE ────────────────────────────────────────────────────────────────
+let contacts       = JSON.parse(localStorage.getItem('cs_contacts') || '[]');
+let apiKey         = localStorage.getItem('cs_gvision_key') || '';
+let currentDataUrl = null;
+let rawShown       = false;
+let setupOpen      = true;
 
-// ── INIT ──────────────────────────────────────────────────────────────────
-window.onload = () => renderContacts();
+// ── INIT ─────────────────────────────────────────────────────────────────
+window.onload = () => {
+  if (apiKey) {
+    document.getElementById('apiKeyInput').value = apiKey;
+    markKeySaved(false);
+  }
+  renderContacts();
+};
 
-// ── FILE HANDLING ─────────────────────────────────────────────────────────
+// ── KEY ───────────────────────────────────────────────────────────────────
+function saveKey() {
+  const v = document.getElementById('apiKeyInput').value.trim();
+  if (!v.startsWith('AIza') || v.length < 20) {
+    setKeyStatus('Key should start with AIzaSy… — check and try again', false);
+    return;
+  }
+  apiKey = v;
+  localStorage.setItem('cs_gvision_key', apiKey);
+  markKeySaved(true);
+}
+
+function markKeySaved(showToast) {
+  setKeyStatus('✓ Key saved — ready to scan!', true);
+  document.getElementById('setupCard').classList.add('saved');
+  document.getElementById('collapseBtn').classList.add('show');
+  if (showToast) toast('✓ API key saved!', 'success');
+}
+
+function setKeyStatus(msg, ok) {
+  const el = document.getElementById('keyStatus');
+  el.textContent = msg;
+  el.className = 'key-status ' + (ok ? 'ok' : 'err');
+}
+
+function toggleSetup() {
+  setupOpen = !setupOpen;
+  document.getElementById('setupBody').style.display = setupOpen ? '' : 'none';
+  document.getElementById('collapseBtn').textContent  = setupOpen ? '▲ Hide setup' : '▼ Show setup';
+}
+
+// ── FILE ─────────────────────────────────────────────────────────────────
 function triggerFile() { document.getElementById('fileInput').click(); }
 
 function handleFile(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    currentImageDataUrl = ev.target.result;
-    document.getElementById('previewImg').src = currentImageDataUrl;
+  resizeImage(file, 1600).then(dataUrl => {
+    currentDataUrl = dataUrl;
+    document.getElementById('previewImg').src = dataUrl;
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('scanOverlay').classList.add('hidden');
     document.getElementById('ocrBtn').disabled = false;
     document.getElementById('clearBtn').disabled = false;
-  };
-  reader.readAsDataURL(file);
+  });
   e.target.value = '';
 }
 
+function resizeImage(file, maxPx) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', 0.93));
+    };
+    img.src = url;
+  });
+}
+
 function clearImage() {
-  currentImageDataUrl = null;
+  currentDataUrl = null;
   document.getElementById('previewImg').style.display = 'none';
   document.getElementById('previewImg').src = '';
   document.getElementById('scanOverlay').classList.remove('hidden');
@@ -468,297 +355,209 @@ function clearImage() {
   document.getElementById('editCard').classList.remove('active');
 }
 
-// ── IMAGE PREPROCESSING — boosts OCR accuracy ────────────────────────────
-function preprocessImage(dataUrl) {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      // Scale up small images for better OCR
-      const scale = Math.max(1, Math.min(3, 1600 / Math.max(img.width, img.height)));
-      canvas.width  = img.width  * scale;
-      canvas.height = img.height * scale;
-      const ctx = canvas.getContext('2d');
-
-      // Draw scaled
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      // Greyscale + contrast boost
-      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d  = id.data;
-      for (let i = 0; i < d.length; i += 4) {
-        // Luminance
-        let g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-        // Contrast stretch (push darks darker, lights lighter)
-        g = Math.min(255, Math.max(0, (g - 128) * 1.4 + 128));
-        // Slight sharpness via threshold nudge
-        g = g > 180 ? Math.min(255, g + 20) : g < 80 ? Math.max(0, g - 20) : g;
-        d[i] = d[i+1] = d[i+2] = g;
-      }
-      ctx.putImageData(id, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.src = dataUrl;
-  });
-}
-
-// ── OCR WITH TESSERACT.JS ─────────────────────────────────────────────────
+// ── GOOGLE VISION OCR ─────────────────────────────────────────────────────
 async function runOCR() {
-  if (!currentImageDataUrl) return;
+  if (!currentDataUrl) return;
+  if (!apiKey) {
+    toast('Paste your Google API key in the setup above first', 'error');
+    document.getElementById('setupCard').scrollIntoView({ behavior:'smooth' });
+    return;
+  }
+
   document.getElementById('ocrBtn').disabled = true;
   document.getElementById('editCard').classList.remove('active');
-  showProgress(true, 'Preprocessing image...', 8);
+  showProgress(true, 'Sending image to Google Vision…', 20);
   document.getElementById('scanLine').style.display = 'block';
 
   try {
-    // Preprocess for better OCR
-    const enhanced = await preprocessImage(currentImageDataUrl);
-    showProgress(true, 'Loading OCR engine...', 15);
+    const base64 = currentDataUrl.split(',')[1];
+    showProgress(true, 'Calling Cloud Vision API…', 50);
 
-    const worker = await Tesseract.createWorker('eng', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          const pct = 40 + Math.round(m.progress * 50);
-          showProgress(true, `Reading text... ${pct}%`, pct);
-        } else if (m.status === 'loading tesseract core') {
-          showProgress(true, 'Loading OCR engine...', 18);
-        } else if (m.status === 'initializing tesseract') {
-          showProgress(true, 'Initializing OCR...', 25);
-        } else if (m.status === 'loading language traineddata') {
-          showProgress(true, 'Loading language data...', 32);
-        } else if (m.status === 'initializing api') {
-          showProgress(true, 'Starting recognition...', 38);
-        }
+    const res = await fetch(
+      `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            image: { content: base64 },
+            features: [
+              { type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }
+            ]
+          }]
+        })
       }
-    });
+    );
 
-    // Set OCR params for business cards
-    await worker.setParameters({
-      tessedit_char_whitelist: '',
-      preserve_interword_spaces: '1',
-    });
+    showProgress(true, 'Reading response…', 80);
+    const data = await res.json();
 
-    showProgress(true, 'Scanning card...', 42);
-    const { data: { text } } = await worker.recognize(enhanced);
-    await worker.terminate();
+    if (data.error) throw new Error(data.error.message);
+    const resp = data.responses?.[0];
+    if (!resp) throw new Error('Empty response from API');
+    if (resp.error) throw new Error(resp.error.message);
 
-    rawOCRText = text.trim();
-    showProgress(true, 'Extracting contact fields...', 96);
-    await delay(250);
+    const fullText = resp.fullTextAnnotation?.text
+                  || resp.textAnnotations?.[0]?.description
+                  || '';
+
+    showProgress(true, 'Extracting fields…', 93);
+    await delay(180);
     showProgress(false);
     document.getElementById('scanLine').style.display = 'none';
 
-    if (!rawOCRText || rawOCRText.length < 5) {
-      toast('Could not read text. Try better lighting or a clearer photo.', 'error');
+    if (!fullText.trim()) {
       document.getElementById('ocrBtn').disabled = false;
+      toast('No text detected. Try better lighting or hold the card steady.', 'error');
       return;
     }
 
-    const parsed = parseCardText(rawOCRText);
-    populateForm(parsed, rawOCRText);
+    const parsed = parseCardText(fullText);
+    populateForm(parsed, fullText);
     document.getElementById('editCard').classList.add('active');
-    document.getElementById('editCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('editCard').scrollIntoView({ behavior:'smooth', block:'start' });
 
   } catch (err) {
     showProgress(false);
     document.getElementById('scanLine').style.display = 'none';
     document.getElementById('ocrBtn').disabled = false;
-    toast('OCR failed: ' + err.message, 'error');
+    let msg = err.message || 'Unknown error';
+    if (msg.includes('API_KEY_INVALID') || msg.includes('not valid'))
+      msg = 'Invalid API key. Double-check the key in setup above.';
+    else if (msg.includes('PERMISSION_DENIED'))
+      msg = 'API key blocked. Make sure Cloud Vision API is Enabled in your project.';
+    else if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota'))
+      msg = 'Free quota exhausted for today. Resets tomorrow.';
+    else if (msg.includes('fetch') || msg.includes('network') || msg.includes('NetworkError'))
+      msg = 'Network error. Check your internet connection.';
+    toast('Error: ' + msg, 'error');
   }
 }
 
-// ── SMART PARSER v2 ───────────────────────────────────────────────────────
+// ── PARSER ────────────────────────────────────────────────────────────────
 function parseCardText(rawText) {
-  // Normalise OCR noise: fix common substitutions
-  let text = rawText
-    .replace(/\|/g, 'I')          // pipe → I
-    .replace(/0(?=[a-zA-Z])/g, 'O') // 0 before letter → O  (e.g. 0utlook)
-    .replace(/l(?=\d)/g, '1')      // lowercase l before digit → 1
-    .replace(/[''`]/g, "'")
-    .replace(/\r/g, '');
+  const text  = rawText.replace(/\r/g, '');
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
 
-  const allLines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  // Also try splitting on common separators within lines (|, •, ·)
-  const lines = allLines.flatMap(l => l.split(/\s*[|•·]\s*/).map(s => s.trim())).filter(l => l.length > 1);
+  // EMAIL
+  const emailM = text.match(/[\w.+\-]+@[\w.\-]+\.[a-zA-Z]{2,}/);
+  const email  = emailM ? emailM[0].toLowerCase() : '';
 
-  // ── 1. EMAIL ─────────────────────────────────────────────────────────────
-  // OCR often garbles @ as "at", fix first
-  const emailFixed = text.replace(/\s+at\s+/gi, '@').replace(/\s*\[at\]\s*/gi, '@');
-  const emailRx = /[\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,}/;
-  const emailMatch = emailFixed.match(emailRx);
-  const email = emailMatch ? emailMatch[0].toLowerCase().replace(/[,;>]$/, '') : '';
+  // PHONES
+  const phoneSet = new Set();
+  const phoneList = [];
+  function addPhone(raw, key) {
+    if (!phoneSet.has(key) && key.length >= 7) { phoneSet.add(key); phoneList.push(raw.trim()); }
+  }
+  for (const m of text.matchAll(/(?:\+91[\s\-.]?|(?<!\d)0)?([6-9]\d{9})(?!\d)/g))
+    addPhone(m[0], m[1]);
+  for (const m of text.matchAll(/(?:\(0\d{2,4}\)|0\d{2,4})[\s\-.]?\d{6,8}/g))
+    addPhone(m[0], m[0].replace(/\D/g,''));
+  for (const m of text.matchAll(/\+(?!91)\d{1,3}[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{3,5}[\s\-.]?\d{3,6}/g))
+    addPhone(m[0], m[0].replace(/\D/g,''));
+  const labPh = text.match(/(?:tel|ph|phone|mobile|mob|cell|m\s*:|t\s*:)[\s:.#*]+([+\d][\d\s\-().]{6,18})/i);
+  if (labPh) addPhone(labPh[1], labPh[1].replace(/\D/g,''));
 
-  // ── 2. PHONE (multiple patterns, deduplicated) ───────────────────────────
-  const phoneRaw = [];
-  // Indian mobile: 10 digits starting 6-9, optionally prefixed +91 or 0
-  const inMobile = [...text.matchAll(/(?<!\d)(?:\+91[\s\-.]?|0)?([6-9]\d{9})(?!\d)/g)];
-  inMobile.forEach(m => phoneRaw.push(m[0].trim()));
-  // Landline with STD: (0xx) xxxxxxx or 0xx-xxxxxxx
-  const landline = [...text.matchAll(/(?<!\d)(?:\(0\d{2,4}\)|0\d{2,4})[\s\-.]?\d{6,8}(?!\d)/g)];
-  landline.forEach(m => phoneRaw.push(m[0].trim()));
-  // International: +country_code then 7-12 digits
-  const intl = [...text.matchAll(/\+(?!91)\d{1,3}[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{3,5}[\s\-.]?\d{3,6}/g)];
-  intl.forEach(m => phoneRaw.push(m[0].trim()));
-  // Fallback: sequences of 8-12 digits (with spaces/dashes), not part of email or year
-  const fallback = [...text.matchAll(/(?<![/@\d])(\d[\d\s.\-]{6,14}\d)(?![\d@])/g)]
-    .map(m => m[0].trim())
-    .filter(p => {
-      const digits = p.replace(/\D/g,'');
-      return digits.length >= 8 && digits.length <= 13 && !/^(19|20)\d{2}$/.test(digits);
-    });
-  fallback.forEach(p => phoneRaw.push(p));
+  const phone  = phoneList[0] || '';
+  const phone2 = phoneList[1] || '';
 
-  // Deduplicate by digit string
-  const seen = new Set();
-  const phones = phoneRaw.filter(p => {
-    const key = p.replace(/\D/g,'');
-    if (seen.has(key)) return false;
-    seen.add(key); return true;
-  }).slice(0, 2);
+  // WEBSITE
+  const webM  = text.match(/(?:https?:\/\/|www\.)[^\s,;)\n]+/i);
+  const domM  = text.match(/\b([a-zA-Z0-9\-]+\.(?:com|in|co\.in|net|org|io|biz|info))\b/i);
+  let website = webM ? webM[0].replace(/[.,;>)\n]+$/, '')
+              : (domM && !email.includes(domM[0])) ? domM[0] : '';
 
-  const phone  = phones[0] || '';
-  const phone2 = phones[1] || '';
-
-  // ── 3. WEBSITE ───────────────────────────────────────────────────────────
-  const webRx = /(?:https?:\/\/|www\.)[^\s,;)>]+/i;
-  const webMatch = text.match(webRx);
-  // Also detect bare domain-like patterns (e.g. acme.com, acme.in)
-  const domainRx = /\b([a-zA-Z0-9\-]+\.(?:com|in|co\.in|net|org|io|biz|info|co))\b/i;
-  let website = webMatch
-    ? webMatch[0].replace(/[.,;>)]+$/, '')
-    : (domainRx.test(text) && !emailMatch ? text.match(domainRx)[0] : '');
-
-  // ── 4. LABEL-BASED EXTRACTION ─────────────────────────────────────────
-  // Cards often have "Email:", "Tel:", "Mob:", "Addr:" labels — grab what follows
-  function labeled(rx) {
-    const m = text.match(rx);
-    return m ? m[1].trim().replace(/[|>]+$/, '').trim() : '';
+  // ADDRESS (labeled first, then keyword search)
+  const addrKw = /\b(road|rd\b|street|st\b|nagar|colony|sector|plot|floor|building|bldg|complex|phase|block|lane|avenue|marg|garden|park|city|town|district|dist\b|state|pin\b|zip|taluk|near|opp|behind|beside|\d{6})\b/i;
+  const addrLab = text.match(/(?:address|addr|office addr|regd\.? office)[\s:]+(.{10,}?)(?=\n[A-Z]|\n\n|$)/is);
+  let address = '';
+  if (addrLab) {
+    address = addrLab[1].replace(/\n/g,', ').trim();
+  } else {
+    const aLines = lines.filter(l => addrKw.test(l));
+    const pinL   = lines.find(l => /\b\d{6}\b/.test(l) && !phoneList.includes(l));
+    if (pinL && !aLines.includes(pinL)) aLines.push(pinL);
+    address = aLines.join(', ');
   }
 
-  const labeledEmail   = labeled(/(?:e[-\s]?mail|mail)[\s:]+([^\s,\n]+@[^\s,\n]+)/i);
-  const labeledPhone   = labeled(/(?:tel|ph|phone|mobile|mob|cell|call|whatsapp)[\s:.#*]+([+\d][\d\s\-().]{6,20})/i);
-  const labeledPhone2  = labeled(/(?:alt|alternate|other|landline|office|fax)[\s:.#]+([+\d][\d\s\-().]{6,20})/i);
-  const labeledWeb     = labeled(/(?:web|website|www|url|site)[\s:]+([^\s,\n]+)/i);
-  const labeledAddr    = labeled(/(?:address|addr|office|located at|location)[\s:]+(.{10,})/i);
+  // CLEAN LINES: remove lines that are clearly data (phone/email/web/addr)
+  function isDataLine(l) {
+    if (/[\w.+\-]+@[\w.\-]+/.test(l)) return true;
+    const d = l.replace(/\D/g,'');
+    if (d.length >= 8 && d.length <= 13 && !l.match(/^[A-Z]/)) return true;
+    if (/(?:https?:\/\/|www\.)/i.test(l)) return true;
+    if (addrKw.test(l)) return true;
+    if (/^(?:tel|ph|mob|fax|email|web|www|addr|m\s*:|t\s*:)/i.test(l)) return true;
+    if (/\b\d{6}\b/.test(l)) return true;
+    return false;
+  }
+  const tLines = lines.filter(l => !isDataLine(l));
 
-  const finalEmail   = labeledEmail   || email;
-  const finalPhone   = labeledPhone   || phone;
-  const finalPhone2  = labeledPhone2  || phone2;
-  const finalWebsite = labeledWeb     || website;
+  // KEYWORDS
+  const titleKw   = /\b(ceo|cto|cfo|coo|cso|cmo|vp|vice[\s-]president|director|manager|engineer|developer|designer|founder|co[\-\s]?founder|president|head|officer|lead|sr\.?|jr\.?|senior|junior|analyst|consultant|executive|partner|associate|advisor|chairman|md\b|gm\b|dg\b|proprietor|owner|principal|professor|dr\.?|doctor|advocate|lawyer|architect|ca\b|cs\b|intern|trainee|assistant|deputy|brand|marketing|sales|accounts|finance|hr\b|it head)\b/i;
+  const companyKw = /\b(pvt|private|public|limited|ltd|inc|llp|llc|solutions|technologies|technology|tech|services|consultancy|consulting|group|industries|enterprise|enterprises|systems|labs|studio|design|designs|media|agency|associates|international|global|national|india|exports|imports|traders|trading|manufacturers|suppliers|distributor|construction|infra|builders|developers|realty|finance|capital|investments|bank|insurance|hospital|clinic|school|college|university|institute|foundation|ventures|holdings|corporate)\b/i;
 
-  // ── 5. BUILD CLEAN LINES (remove already-extracted data) ─────────────
-  const usedPatterns = [finalEmail, finalPhone, finalPhone2, finalWebsite]
-    .filter(Boolean)
-    .map(s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-
-  const isDataLine = l => {
-    const ld = l.replace(/\D/g,'');
-    return (
-      emailRx.test(l) ||
-      (ld.length >= 8 && ld.length <= 13) ||
-      webRx.test(l) ||
-      domainRx.test(l) ||
-      /^(?:tel|ph|mob|fax|email|web|www|addr|address|url)/i.test(l) ||
-      usedPatterns.some(p => new RegExp(p,'i').test(l))
-    );
-  };
-
-  const textLines = lines.filter(l => !isDataLine(l));
-
-  // ── 6. NAME ──────────────────────────────────────────────────────────────
-  const titleKw = /\b(ceo|cto|cfo|coo|cso|cmo|vp|vice[\s-]president|director|manager|engineer|developer|designer|founder|co-founder|president|head|officer|lead|senior|junior|analyst|consultant|executive|partner|associate|advisor|chairman|md|gm|dg|proprietor|proprietress|owner|principal|professor|dr|doctor|advocate|architect|chartered|accountant|ca|cs|lawyer|intern|trainee|assistant)\b/i;
-  const companyKw = /\b(pvt|private|public|limited|ltd|inc|llp|llc|solutions|technologies|technology|tech|services|consultancy|consulting|group|industries|enterprise|enterprises|systems|labs|studio|studios|design|designs|media|agency|associates|international|global|national|india|exports|imports|traders|trading|manufacturer|suppliers|distributor|construction|infra|builders|developers|realty|finance|capital|investments|bank|insurance|hospital|clinic|school|college|university|institute)\b/i;
-  const addrKw   = /\b(road|rd|street|st|nagar|colony|sector|plot|floor|building|bldg|complex|phase|block|lane|avenue|ave|marg|garden|park|city|town|district|dist|state|pin|zip|taluk|tehsil|mandal|near|opp|behind|above|beside|next to|\d{6})\b/i;
-
-  // Score each text line for likelihood of being a name
+  // NAME scoring
   function nameScore(l) {
+    if (l.length < 3 || l.length > 42) return -99;
     let s = 0;
-    const words = l.split(/\s+/);
-    if (words.length >= 2 && words.length <= 4) s += 3;
-    if (/^[A-Z][a-z]/.test(l)) s += 2;              // Title case
-    if (/^[A-Z\s.]+$/.test(l) && l.length > 4) s += 2; // ALL CAPS name
-    if (!/[\d@#\/\\%&*]/.test(l)) s += 2;            // no special chars
-    if (!titleKw.test(l)) s += 1;
-    if (!companyKw.test(l)) s += 1;
-    if (!addrKw.test(l)) s += 1;
-    if (l.length > 30) s -= 3;                       // too long for a name
-    if (l.length < 4) s -= 4;
-    if (/^(mr|mrs|ms|dr|prof)\.?\s/i.test(l)) s += 3; // has prefix
+    const wds = l.split(/\s+/);
+    if (wds.length >= 2 && wds.length <= 4) s += 4;
+    if (wds.length === 1 && /^[A-Z][a-z]{2,}$/.test(l)) s += 1;
+    if (/^[A-Z][a-z]/.test(l)) s += 2;
+    if (/^[A-Z][A-Z\s.]+$/.test(l) && l.length > 3) s += 2;
+    if (!/[\d@#\/\\%&*_|]/.test(l)) s += 2;
+    if (/^(Mr|Mrs|Ms|Dr|Prof|Er|Ar|CA|Adv|Sh|Shri)\.?\s/i.test(l)) s += 4;
+    if (titleKw.test(l))   s -= 3;
+    if (companyKw.test(l)) s -= 3;
+    if (addrKw.test(l))    s -= 4;
     return s;
   }
 
-  const nameCandidates = textLines
-    .slice(0, Math.min(8, textLines.length))
+  const nc = tLines.slice(0, Math.min(10, tLines.length))
     .map(l => ({ l, s: nameScore(l) }))
-    .filter(x => x.s > 0)
+    .filter(x => x.s > 1)
     .sort((a,b) => b.s - a.s);
+  const name = nc[0]?.l || tLines[0] || '';
 
-  const name = nameCandidates[0]?.l || textLines[0] || '';
-
-  // ── 7. TITLE ─────────────────────────────────────────────────────────────
-  const titleLine = textLines.find(l =>
-    titleKw.test(l) && l !== name && l.length < 60
-  );
-  // Also check lines after name for short descriptors
-  const nameIdx = textLines.indexOf(name);
-  const nearTitle = nameIdx >= 0
-    ? textLines.slice(nameIdx + 1, nameIdx + 3).find(l =>
-        !companyKw.test(l) && !addrKw.test(l) && l.length < 50 && l !== name
-      )
+  // TITLE
+  const titleLine = tLines.find(l => titleKw.test(l) && l !== name && l.length < 70);
+  const ni = tLines.indexOf(name);
+  const nearTitle = ni >= 0
+    ? tLines.slice(ni+1, ni+4).find(l => !companyKw.test(l) && !addrKw.test(l) && l.length < 55 && l !== name)
     : '';
   const title = titleLine || nearTitle || '';
 
-  // ── 8. COMPANY ───────────────────────────────────────────────────────────
-  const companyLine = textLines.find(l =>
-    companyKw.test(l) && l !== name && l !== title
-  );
-  // Fallback: longest capitalised/all-caps line that isn't name/title
-  const fallbackCompany = textLines
-    .filter(l => l !== name && l !== title && !addrKw.test(l) && l.length > 3 && l.length < 60)
-    .sort((a,b) => b.length - a.length)[0] || '';
-  const company = companyLine || fallbackCompany;
+  // COMPANY
+  const compLine = tLines.find(l => companyKw.test(l) && l !== name && l !== title);
+  const fallCo   = tLines.filter(l => l !== name && l !== title && !addrKw.test(l) && l.length > 3 && l.length < 65)
+                         .sort((a,b) => b.length - a.length)[0] || '';
+  const company  = compLine || fallCo;
 
-  // ── 9. ADDRESS ───────────────────────────────────────────────────────────
-  let address = labeledAddr || '';
-  if (!address) {
-    const addrLines = textLines.filter(l =>
-      addrKw.test(l) && l !== name && l !== title && l !== company
-    );
-    // Also grab PIN code line
-    const pinLine = lines.find(l => /\b\d{6}\b/.test(l) && l !== phone && l !== phone2);
-    if (pinLine && !addrLines.includes(pinLine)) addrLines.push(pinLine);
-    address = addrLines.join(', ');
-  }
-
-  return {
-    name:    name.replace(/^(Mr|Mrs|Ms|Dr|Prof)\.?\s+/i,'$1. ').trim(),
-    title:   title.trim(),
-    company: company.trim(),
-    email:   finalEmail,
-    phone:   finalPhone,
-    phone2:  finalPhone2,
-    website: finalWebsite,
-    address: address.trim()
-  };
+  return { name: name.trim(), title: title.trim(), company: company.trim(),
+           email, phone, phone2, website, address: address.trim() };
 }
 
+// ── FORM ─────────────────────────────────────────────────────────────────
 function populateForm(d, raw) {
-  document.getElementById('f_name').value = d.name || '';
-  document.getElementById('f_title').value = d.title || '';
-  document.getElementById('f_company').value = d.company || '';
-  document.getElementById('f_email').value = d.email || '';
-  document.getElementById('f_phone').value = d.phone || '';
-  document.getElementById('f_phone2').value = d.phone2 || '';
-  document.getElementById('f_website').value = d.website || '';
-  document.getElementById('f_address').value = d.address || '';
-  document.getElementById('rawBox').value = raw || '';
-  document.getElementById('editSubtitle').textContent = d.name ? `Found: ${d.name}` : 'Check and fill in fields';
+  document.getElementById('f_name').value    = d.name;
+  document.getElementById('f_title').value   = d.title;
+  document.getElementById('f_company').value = d.company;
+  document.getElementById('f_email').value   = d.email;
+  document.getElementById('f_phone').value   = d.phone;
+  document.getElementById('f_phone2').value  = d.phone2;
+  document.getElementById('f_website').value = d.website;
+  document.getElementById('f_address').value = d.address;
+  document.getElementById('rawBox').value    = raw;
+  document.getElementById('editSub').textContent = d.name
+    ? `Found: ${d.name} — review & save`
+    : 'Review fields below and fill any missing info';
 }
 
 function toggleRaw() {
   rawShown = !rawShown;
   document.getElementById('rawBox').classList.toggle('show', rawShown);
-  document.getElementById('rawToggleLabel').textContent = rawShown ? 'Hide raw OCR text' : 'Show raw OCR text';
+  document.getElementById('rawLbl').textContent = rawShown ? 'Hide raw text' : 'Show raw text from card';
 }
 
 function cancelEdit() {
@@ -766,26 +565,26 @@ function cancelEdit() {
   document.getElementById('ocrBtn').disabled = false;
 }
 
-// ── SAVE ──────────────────────────────────────────────────────────────────
+// ── SAVE ─────────────────────────────────────────────────────────────────
 function saveContact() {
-  const contact = {
+  const c = {
     id: Date.now(),
-    name: val('f_name') || 'Unknown',
-    title: val('f_title'),
-    company: val('f_company'),
-    email: val('f_email'),
-    phone: val('f_phone'),
-    phone2: val('f_phone2'),
-    website: val('f_website'),
-    address: val('f_address'),
-    scannedAt: new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+    name:      g('f_name')    || 'Unknown',
+    title:     g('f_title'),
+    company:   g('f_company'),
+    email:     g('f_email'),
+    phone:     g('f_phone'),
+    phone2:    g('f_phone2'),
+    website:   g('f_website'),
+    address:   g('f_address'),
+    scannedAt: new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
   };
-  contacts.unshift(contact);
+  contacts.unshift(c);
   persist();
   renderContacts();
   document.getElementById('editCard').classList.remove('active');
   clearImage();
-  toast(`✓ ${contact.name} saved!`, 'success');
+  toast(`✓ ${c.name} saved!`, 'success');
 }
 
 function deleteContact(id) {
@@ -805,75 +604,61 @@ function clearAll() {
 
 // ── RENDER ────────────────────────────────────────────────────────────────
 function renderContacts() {
-  const list = document.getElementById('contactsList');
   const n = contacts.length;
-  document.getElementById('countLabel').textContent = `${n} contact${n !== 1 ? 's' : ''}`;
-  const hasContacts = n > 0;
-  ['exportBtn','exportBtnBottom','clearAllBtn'].forEach(id => {
-    document.getElementById(id).disabled = !hasContacts;
+  document.getElementById('countLabel').textContent = `${n} contact${n!==1?'s':''}`;
+  ['exportBtn','exportBtnB','clearAllBtn'].forEach(id => {
+    document.getElementById(id).disabled = n === 0;
   });
-
-  if (!hasContacts) {
+  const list = document.getElementById('contactsList');
+  if (!n) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">📇</div><div class="empty-text">No contacts yet.<br/>Scan your first visiting card!</div></div>`;
     return;
   }
-
   list.innerHTML = contacts.map(c => `
     <div class="contact-card">
-      <div class="contact-avatar">${(c.name||'?')[0].toUpperCase()}</div>
-      <div class="contact-info">
-        <div class="contact-name">${esc(c.name)}</div>
-        <div class="contact-meta">${[esc(c.title),esc(c.company)].filter(Boolean).join(' · ')||'—'}</div>
+      <div class="cav">${(c.name||'?')[0].toUpperCase()}</div>
+      <div class="ci">
+        <div class="cn">${esc(c.name)}</div>
+        <div class="cm">${[esc(c.title),esc(c.company)].filter(Boolean).join(' · ')||'—'}</div>
         <div class="chips">
-          ${c.email?`<span class="chip em">✉ ${esc(c.email)}</span>`:''}
-          ${c.phone?`<span class="chip ph">📞 ${esc(c.phone)}</span>`:''}
-          ${c.website?`<span class="chip">🌐 ${esc(c.website)}</span>`:''}
+          ${c.email   ? `<span class="chip em">✉ ${esc(c.email)}</span>`  : ''}
+          ${c.phone   ? `<span class="chip ph">📞 ${esc(c.phone)}</span>` : ''}
+          ${c.website ? `<span class="chip">🌐 ${esc(c.website)}</span>`  : ''}
         </div>
       </div>
-      <button class="contact-del" onclick="deleteContact(${c.id})">✕</button>
-    </div>
-  `).join('');
+      <button class="cdel" onclick="deleteContact(${c.id})">✕</button>
+    </div>`).join('');
 }
 
-// ── EXCEL EXPORT ──────────────────────────────────────────────────────────
+// ── EXCEL ─────────────────────────────────────────────────────────────────
 function exportExcel() {
   if (!contacts.length) return toast('No contacts to export', 'error');
-
   const headers = ['Name','Job Title','Company','Email','Phone','Alt Phone','Website','Address','Scanned On'];
-  const rows = contacts.map(c => [c.name,c.title,c.company,c.email,c.phone,c.phone2,c.website,c.address,c.scannedAt]);
-
+  const rows    = contacts.map(c => [c.name,c.title,c.company,c.email,c.phone,c.phone2,c.website,c.address,c.scannedAt]);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws['!cols'] = [{wch:22},{wch:20},{wch:24},{wch:28},{wch:16},{wch:16},{wch:22},{wch:34},{wch:14}];
-
-  // Freeze header row
-  ws['!freeze'] = { xSplit:0, ySplit:1 };
-
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-
-  const date = new Date().toISOString().split('T')[0];
-  XLSX.writeFile(wb, `CardScan_${date}.xlsx`);
+  XLSX.writeFile(wb, `CardScan_${new Date().toISOString().split('T')[0]}.xlsx`);
   toast(`📊 Exported ${contacts.length} contacts!`, 'success');
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────
 function showProgress(show, label='', pct=0) {
   document.getElementById('progressCard').classList.toggle('active', show);
-  document.getElementById('progressLabel').textContent = label;
-  document.getElementById('progressFill').style.width = pct + '%';
+  if (label) document.getElementById('pLabel').textContent = label;
+  document.getElementById('pFill').style.width = pct + '%';
 }
-
-function val(id) { return document.getElementById(id).value.trim(); }
+function g(id)  { return document.getElementById(id).value.trim(); }
 function persist() { localStorage.setItem('cs_contacts', JSON.stringify(contacts)); }
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
-
 let toastT;
 function toast(msg, type='info') {
   const el = document.getElementById('toast');
   el.textContent = msg; el.className = `show ${type}`;
   clearTimeout(toastT);
-  toastT = setTimeout(() => el.classList.remove('show'), 3000);
+  toastT = setTimeout(() => el.classList.remove('show'), 3500);
 }
 </script>
 </body>
