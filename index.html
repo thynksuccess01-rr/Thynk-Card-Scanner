@@ -468,39 +468,91 @@ function clearImage() {
   document.getElementById('editCard').classList.remove('active');
 }
 
+// ── IMAGE PREPROCESSING — boosts OCR accuracy ────────────────────────────
+function preprocessImage(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // Scale up small images for better OCR
+      const scale = Math.max(1, Math.min(3, 1600 / Math.max(img.width, img.height)));
+      canvas.width  = img.width  * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+
+      // Draw scaled
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Greyscale + contrast boost
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d  = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        // Luminance
+        let g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+        // Contrast stretch (push darks darker, lights lighter)
+        g = Math.min(255, Math.max(0, (g - 128) * 1.4 + 128));
+        // Slight sharpness via threshold nudge
+        g = g > 180 ? Math.min(255, g + 20) : g < 80 ? Math.max(0, g - 20) : g;
+        d[i] = d[i+1] = d[i+2] = g;
+      }
+      ctx.putImageData(id, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.src = dataUrl;
+  });
+}
+
 // ── OCR WITH TESSERACT.JS ─────────────────────────────────────────────────
 async function runOCR() {
   if (!currentImageDataUrl) return;
   document.getElementById('ocrBtn').disabled = true;
   document.getElementById('editCard').classList.remove('active');
-  showProgress(true, 'Loading OCR engine...', 5);
+  showProgress(true, 'Preprocessing image...', 8);
   document.getElementById('scanLine').style.display = 'block';
 
   try {
+    // Preprocess for better OCR
+    const enhanced = await preprocessImage(currentImageDataUrl);
+    showProgress(true, 'Loading OCR engine...', 15);
+
     const worker = await Tesseract.createWorker('eng', 1, {
       logger: m => {
         if (m.status === 'recognizing text') {
-          const pct = Math.round(m.progress * 100);
-          showProgress(true, `Reading card... ${pct}%`, pct);
+          const pct = 40 + Math.round(m.progress * 50);
+          showProgress(true, `Reading text... ${pct}%`, pct);
         } else if (m.status === 'loading tesseract core') {
-          showProgress(true, 'Loading OCR engine...', 10);
+          showProgress(true, 'Loading OCR engine...', 18);
         } else if (m.status === 'initializing tesseract') {
-          showProgress(true, 'Initializing...', 20);
+          showProgress(true, 'Initializing OCR...', 25);
         } else if (m.status === 'loading language traineddata') {
-          showProgress(true, 'Loading language data...', 35);
+          showProgress(true, 'Loading language data...', 32);
+        } else if (m.status === 'initializing api') {
+          showProgress(true, 'Starting recognition...', 38);
         }
       }
     });
 
-    showProgress(true, 'Scanning card...', 50);
-    const { data: { text } } = await worker.recognize(currentImageDataUrl);
+    // Set OCR params for business cards
+    await worker.setParameters({
+      tessedit_char_whitelist: '',
+      preserve_interword_spaces: '1',
+    });
+
+    showProgress(true, 'Scanning card...', 42);
+    const { data: { text } } = await worker.recognize(enhanced);
     await worker.terminate();
 
     rawOCRText = text.trim();
-    showProgress(true, 'Parsing contact fields...', 95);
-    await delay(300);
+    showProgress(true, 'Extracting contact fields...', 96);
+    await delay(250);
     showProgress(false);
     document.getElementById('scanLine').style.display = 'none';
+
+    if (!rawOCRText || rawOCRText.length < 5) {
+      toast('Could not read text. Try better lighting or a clearer photo.', 'error');
+      document.getElementById('ocrBtn').disabled = false;
+      return;
+    }
 
     const parsed = parseCardText(rawOCRText);
     populateForm(parsed, rawOCRText);
@@ -515,70 +567,179 @@ async function runOCR() {
   }
 }
 
-// ── SMART PARSER ──────────────────────────────────────────────────────────
-function parseCardText(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+// ── SMART PARSER v2 ───────────────────────────────────────────────────────
+function parseCardText(rawText) {
+  // Normalise OCR noise: fix common substitutions
+  let text = rawText
+    .replace(/\|/g, 'I')          // pipe → I
+    .replace(/0(?=[a-zA-Z])/g, 'O') // 0 before letter → O  (e.g. 0utlook)
+    .replace(/l(?=\d)/g, '1')      // lowercase l before digit → 1
+    .replace(/[''`]/g, "'")
+    .replace(/\r/g, '');
 
-  // Email
-  const emailMatch = text.match(/[\w.\-+]+@[\w.\-]+\.[a-z]{2,}/i);
-  const email = emailMatch ? emailMatch[0].toLowerCase() : '';
+  const allLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  // Also try splitting on common separators within lines (|, •, ·)
+  const lines = allLines.flatMap(l => l.split(/\s*[|•·]\s*/).map(s => s.trim())).filter(l => l.length > 1);
 
-  // Phone — Indian & international patterns
-  const phoneMatches = [...text.matchAll(/(?:\+?91[\s\-]?)?(?:[6-9]\d{9}|(?:\d[\s.\-]?){7,12}(?:\d))/g)]
-    .map(m => m[0].replace(/\s+/g,' ').trim())
-    .filter(p => p.replace(/\D/g,'').length >= 7)
-    .slice(0,2);
-  const phone = phoneMatches[0] || '';
-  const phone2 = phoneMatches[1] || '';
+  // ── 1. EMAIL ─────────────────────────────────────────────────────────────
+  // OCR often garbles @ as "at", fix first
+  const emailFixed = text.replace(/\s+at\s+/gi, '@').replace(/\s*\[at\]\s*/gi, '@');
+  const emailRx = /[\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,}/;
+  const emailMatch = emailFixed.match(emailRx);
+  const email = emailMatch ? emailMatch[0].toLowerCase().replace(/[,;>]$/, '') : '';
 
-  // Website
-  const webMatch = text.match(/(?:www\.|https?:\/\/)[^\s,]+/i);
-  const website = webMatch ? webMatch[0].replace(/[,;]$/, '') : '';
-
-  // Remove matched fields from lines for cleaner name/title/company extraction
-  const cleanLines = lines.filter(l =>
-    !emailMatch?.includes(l) &&
-    !phoneMatches.some(p => l.includes(p.replace(/\D/g,'').slice(0,6))) &&
-    !webMatch?.includes(l) &&
-    !l.match(/^\+?\d[\d\s\-().]{6,}$/)
-  );
-
-  // Name heuristic: longest line with 2-4 words, mostly uppercase or title case, near top
-  let name = '';
-  const nameLineCandidates = cleanLines
-    .slice(0, Math.min(5, cleanLines.length))
-    .filter(l => {
-      const words = l.split(/\s+/);
-      return words.length >= 2 && words.length <= 5 &&
-        !/[@\/\\|:_\d]/.test(l) &&
-        l.length > 4 &&
-        !/^(pvt|ltd|inc|llc|co\.|www|tel|fax|mob|ph|email|address)/i.test(l);
-    })
-    .sort((a, b) => {
-      const aScore = /^[A-Z]/.test(a) ? 1 : 0;
-      const bScore = /^[A-Z]/.test(b) ? 1 : 0;
-      return bScore - aScore;
+  // ── 2. PHONE (multiple patterns, deduplicated) ───────────────────────────
+  const phoneRaw = [];
+  // Indian mobile: 10 digits starting 6-9, optionally prefixed +91 or 0
+  const inMobile = [...text.matchAll(/(?<!\d)(?:\+91[\s\-.]?|0)?([6-9]\d{9})(?!\d)/g)];
+  inMobile.forEach(m => phoneRaw.push(m[0].trim()));
+  // Landline with STD: (0xx) xxxxxxx or 0xx-xxxxxxx
+  const landline = [...text.matchAll(/(?<!\d)(?:\(0\d{2,4}\)|0\d{2,4})[\s\-.]?\d{6,8}(?!\d)/g)];
+  landline.forEach(m => phoneRaw.push(m[0].trim()));
+  // International: +country_code then 7-12 digits
+  const intl = [...text.matchAll(/\+(?!91)\d{1,3}[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{3,5}[\s\-.]?\d{3,6}/g)];
+  intl.forEach(m => phoneRaw.push(m[0].trim()));
+  // Fallback: sequences of 8-12 digits (with spaces/dashes), not part of email or year
+  const fallback = [...text.matchAll(/(?<![/@\d])(\d[\d\s.\-]{6,14}\d)(?![\d@])/g)]
+    .map(m => m[0].trim())
+    .filter(p => {
+      const digits = p.replace(/\D/g,'');
+      return digits.length >= 8 && digits.length <= 13 && !/^(19|20)\d{2}$/.test(digits);
     });
-  name = nameLineCandidates[0] || cleanLines[0] || '';
+  fallback.forEach(p => phoneRaw.push(p));
 
-  // Title: line with common job keywords
-  const titleKeywords = /\b(ceo|cto|cfo|coo|vp|director|manager|engineer|developer|designer|founder|president|head|officer|lead|senior|junior|analyst|consultant|executive|partner|associate|advisor|chairman|md|gm|dg|proprietor|owner)\b/i;
-  const titleLine = cleanLines.find(l => titleKeywords.test(l) && l !== name);
-  let title = titleLine ? titleLine : '';
+  // Deduplicate by digit string
+  const seen = new Set();
+  const phones = phoneRaw.filter(p => {
+    const key = p.replace(/\D/g,'');
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  }).slice(0, 2);
 
-  // Company: line with Pvt, Ltd, Inc, LLP, or longest capitalised line after name
-  const companyKeywords = /\b(pvt|ltd|private|limited|inc|llp|llc|solutions|technologies|services|consultancy|group|industries|enterprises|systems|labs|studio|designs|media|agency)\b/i;
-  const companyLine = cleanLines.find(l => companyKeywords.test(l) && l !== name && l !== title);
-  let company = companyLine || '';
+  const phone  = phones[0] || '';
+  const phone2 = phones[1] || '';
 
-  // Address: line with typical address keywords or numbers + street
-  const addrKeywords = /\b(road|street|nagar|colony|sector|plot|floor|building|complex|phase|block|lane|avenue|marg|garden|park|city|town|district|state|pin|zip|\d{3,})/i;
-  const addrLines = cleanLines.filter(l =>
-    addrKeywords.test(l) && l !== name && l !== title && l !== company
+  // ── 3. WEBSITE ───────────────────────────────────────────────────────────
+  const webRx = /(?:https?:\/\/|www\.)[^\s,;)>]+/i;
+  const webMatch = text.match(webRx);
+  // Also detect bare domain-like patterns (e.g. acme.com, acme.in)
+  const domainRx = /\b([a-zA-Z0-9\-]+\.(?:com|in|co\.in|net|org|io|biz|info|co))\b/i;
+  let website = webMatch
+    ? webMatch[0].replace(/[.,;>)]+$/, '')
+    : (domainRx.test(text) && !emailMatch ? text.match(domainRx)[0] : '');
+
+  // ── 4. LABEL-BASED EXTRACTION ─────────────────────────────────────────
+  // Cards often have "Email:", "Tel:", "Mob:", "Addr:" labels — grab what follows
+  function labeled(rx) {
+    const m = text.match(rx);
+    return m ? m[1].trim().replace(/[|>]+$/, '').trim() : '';
+  }
+
+  const labeledEmail   = labeled(/(?:e[-\s]?mail|mail)[\s:]+([^\s,\n]+@[^\s,\n]+)/i);
+  const labeledPhone   = labeled(/(?:tel|ph|phone|mobile|mob|cell|call|whatsapp)[\s:.#*]+([+\d][\d\s\-().]{6,20})/i);
+  const labeledPhone2  = labeled(/(?:alt|alternate|other|landline|office|fax)[\s:.#]+([+\d][\d\s\-().]{6,20})/i);
+  const labeledWeb     = labeled(/(?:web|website|www|url|site)[\s:]+([^\s,\n]+)/i);
+  const labeledAddr    = labeled(/(?:address|addr|office|located at|location)[\s:]+(.{10,})/i);
+
+  const finalEmail   = labeledEmail   || email;
+  const finalPhone   = labeledPhone   || phone;
+  const finalPhone2  = labeledPhone2  || phone2;
+  const finalWebsite = labeledWeb     || website;
+
+  // ── 5. BUILD CLEAN LINES (remove already-extracted data) ─────────────
+  const usedPatterns = [finalEmail, finalPhone, finalPhone2, finalWebsite]
+    .filter(Boolean)
+    .map(s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+
+  const isDataLine = l => {
+    const ld = l.replace(/\D/g,'');
+    return (
+      emailRx.test(l) ||
+      (ld.length >= 8 && ld.length <= 13) ||
+      webRx.test(l) ||
+      domainRx.test(l) ||
+      /^(?:tel|ph|mob|fax|email|web|www|addr|address|url)/i.test(l) ||
+      usedPatterns.some(p => new RegExp(p,'i').test(l))
+    );
+  };
+
+  const textLines = lines.filter(l => !isDataLine(l));
+
+  // ── 6. NAME ──────────────────────────────────────────────────────────────
+  const titleKw = /\b(ceo|cto|cfo|coo|cso|cmo|vp|vice[\s-]president|director|manager|engineer|developer|designer|founder|co-founder|president|head|officer|lead|senior|junior|analyst|consultant|executive|partner|associate|advisor|chairman|md|gm|dg|proprietor|proprietress|owner|principal|professor|dr|doctor|advocate|architect|chartered|accountant|ca|cs|lawyer|intern|trainee|assistant)\b/i;
+  const companyKw = /\b(pvt|private|public|limited|ltd|inc|llp|llc|solutions|technologies|technology|tech|services|consultancy|consulting|group|industries|enterprise|enterprises|systems|labs|studio|studios|design|designs|media|agency|associates|international|global|national|india|exports|imports|traders|trading|manufacturer|suppliers|distributor|construction|infra|builders|developers|realty|finance|capital|investments|bank|insurance|hospital|clinic|school|college|university|institute)\b/i;
+  const addrKw   = /\b(road|rd|street|st|nagar|colony|sector|plot|floor|building|bldg|complex|phase|block|lane|avenue|ave|marg|garden|park|city|town|district|dist|state|pin|zip|taluk|tehsil|mandal|near|opp|behind|above|beside|next to|\d{6})\b/i;
+
+  // Score each text line for likelihood of being a name
+  function nameScore(l) {
+    let s = 0;
+    const words = l.split(/\s+/);
+    if (words.length >= 2 && words.length <= 4) s += 3;
+    if (/^[A-Z][a-z]/.test(l)) s += 2;              // Title case
+    if (/^[A-Z\s.]+$/.test(l) && l.length > 4) s += 2; // ALL CAPS name
+    if (!/[\d@#\/\\%&*]/.test(l)) s += 2;            // no special chars
+    if (!titleKw.test(l)) s += 1;
+    if (!companyKw.test(l)) s += 1;
+    if (!addrKw.test(l)) s += 1;
+    if (l.length > 30) s -= 3;                       // too long for a name
+    if (l.length < 4) s -= 4;
+    if (/^(mr|mrs|ms|dr|prof)\.?\s/i.test(l)) s += 3; // has prefix
+    return s;
+  }
+
+  const nameCandidates = textLines
+    .slice(0, Math.min(8, textLines.length))
+    .map(l => ({ l, s: nameScore(l) }))
+    .filter(x => x.s > 0)
+    .sort((a,b) => b.s - a.s);
+
+  const name = nameCandidates[0]?.l || textLines[0] || '';
+
+  // ── 7. TITLE ─────────────────────────────────────────────────────────────
+  const titleLine = textLines.find(l =>
+    titleKw.test(l) && l !== name && l.length < 60
   );
-  const address = addrLines.join(', ');
+  // Also check lines after name for short descriptors
+  const nameIdx = textLines.indexOf(name);
+  const nearTitle = nameIdx >= 0
+    ? textLines.slice(nameIdx + 1, nameIdx + 3).find(l =>
+        !companyKw.test(l) && !addrKw.test(l) && l.length < 50 && l !== name
+      )
+    : '';
+  const title = titleLine || nearTitle || '';
 
-  return { name, title, company, email, phone, phone2, website, address };
+  // ── 8. COMPANY ───────────────────────────────────────────────────────────
+  const companyLine = textLines.find(l =>
+    companyKw.test(l) && l !== name && l !== title
+  );
+  // Fallback: longest capitalised/all-caps line that isn't name/title
+  const fallbackCompany = textLines
+    .filter(l => l !== name && l !== title && !addrKw.test(l) && l.length > 3 && l.length < 60)
+    .sort((a,b) => b.length - a.length)[0] || '';
+  const company = companyLine || fallbackCompany;
+
+  // ── 9. ADDRESS ───────────────────────────────────────────────────────────
+  let address = labeledAddr || '';
+  if (!address) {
+    const addrLines = textLines.filter(l =>
+      addrKw.test(l) && l !== name && l !== title && l !== company
+    );
+    // Also grab PIN code line
+    const pinLine = lines.find(l => /\b\d{6}\b/.test(l) && l !== phone && l !== phone2);
+    if (pinLine && !addrLines.includes(pinLine)) addrLines.push(pinLine);
+    address = addrLines.join(', ');
+  }
+
+  return {
+    name:    name.replace(/^(Mr|Mrs|Ms|Dr|Prof)\.?\s+/i,'$1. ').trim(),
+    title:   title.trim(),
+    company: company.trim(),
+    email:   finalEmail,
+    phone:   finalPhone,
+    phone2:  finalPhone2,
+    website: finalWebsite,
+    address: address.trim()
+  };
 }
 
 function populateForm(d, raw) {
