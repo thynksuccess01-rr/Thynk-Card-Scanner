@@ -275,31 +275,64 @@ function clearImage() {
   document.getElementById('editCard').classList.remove('active');
 }
 
-// ── OCR via PUTER.JS + MISTRAL ────────────────────────────────────────────
+// ── FILE → DATA URL ───────────────────────────────────────────────────────
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('Could not read image file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── OCR via PUTER.JS ──────────────────────────────────────────────────────
 async function runOCR() {
   if (!currentFile) return;
 
   document.getElementById('ocrBtn').disabled = true;
   document.getElementById('editCard').classList.remove('active');
   document.getElementById('puterNote').classList.add('show');
-  showProgress(true, 'Starting Mistral OCR…', 15);
+  showProgress(true, 'Preparing image…', 15);
   document.getElementById('scanLine').style.display = 'block';
 
   try {
-    showProgress(true, 'Reading card with Mistral OCR…', 40);
+    // Convert File to data URL — Puter requires a string, not a File object
+    const dataUrl = await fileToDataUrl(currentFile);
 
-    // Puter's img2txt with Mistral provider — free, no API key
-    const extractedText = await puter.ai.img2txt({
-      source: currentFile,
-      provider: 'mistral'
-    });
+    showProgress(true, 'Reading card with Mistral OCR…', 35);
 
-    showProgress(true, 'Extracting contact fields…', 90);
+    let rawResult;
+    try {
+      // Try Mistral first — best accuracy for business cards
+      rawResult = await puter.ai.img2txt({
+        source: dataUrl,
+        provider: 'mistral'
+      });
+    } catch (e) {
+      // Fallback: AWS Textract (also free via Puter)
+      showProgress(true, 'Trying fallback OCR…', 60);
+      rawResult = await puter.ai.img2txt(dataUrl);
+    }
+
+    showProgress(true, 'Extracting contact fields…', 92);
     await delay(200);
     showProgress(false);
     document.getElementById('scanLine').style.display = 'none';
 
-    const text = (typeof extractedText === 'string' ? extractedText : JSON.stringify(extractedText)).trim();
+    // Normalise result — can be string, object with .text, or Markdown from Mistral
+    let text = '';
+    if (typeof rawResult === 'string') {
+      text = rawResult;
+    } else if (rawResult?.pages) {
+      // Mistral returns {pages: [{markdown: ...}]}
+      text = rawResult.pages.map(p => p.markdown || p.text || '').join('\n');
+    } else if (rawResult?.text) {
+      text = rawResult.text;
+    } else {
+      text = JSON.stringify(rawResult);
+    }
+    // Strip markdown formatting Mistral sometimes adds
+    text = text.replace(/#{1,6}\s/g, '').replace(/\*\*/g, '').replace(/\*/g, '').trim();
 
     if (!text || text.length < 3) {
       document.getElementById('ocrBtn').disabled = false;
@@ -316,11 +349,13 @@ async function runOCR() {
     showProgress(false);
     document.getElementById('scanLine').style.display = 'none';
     document.getElementById('ocrBtn').disabled = false;
-    const msg = err?.message || String(err) || 'Unknown error';
-    if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('sign')) {
-      toast('Please sign in to Puter (free) when the popup appears, then try again.', 'info');
+    const msg = (err?.message || String(err) || '').toLowerCase();
+    if (msg.includes('login') || msg.includes('auth') || msg.includes('sign') || msg.includes('401') || msg.includes('403')) {
+      toast('Sign in to Puter (free, no card) when the popup appears, then tap Extract again.', 'info');
+    } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('failed to fetch')) {
+      toast('Network error — check your internet and try again.', 'error');
     } else {
-      toast('Error: ' + msg.slice(0, 80), 'error');
+      toast('OCR error: ' + (err?.message || String(err)).slice(0, 90), 'error');
     }
   }
 }
